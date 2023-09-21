@@ -1,0 +1,21 @@
+[
+    {
+        "name": "search and download",
+        "function": {
+            "search": "Based on user input, search for relevant papers on arxiv.",
+            "download": "Download papers if user need."
+        }
+    },
+    {
+        "name": "summarizer",
+        "function": {
+            "summarize": "Summarize the content of the paper(in PDF format)."
+        }
+    },
+    {
+        "name": "relevant research",
+        "function":{
+            "related_work" : "Generate relevant field research situation."
+        }
+    }
+]
