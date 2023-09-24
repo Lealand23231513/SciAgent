@@ -53,4 +53,4 @@ chain = LLMChain(
 response = chain.run(text=user2_input, module_descriptions=module_descriptions, output_format = output_format)
 print(response)
 #TODO: Change response into JSON format with langchain method OutputParser. 
-#TODO: Contact controler to other modules
+#TODO: Contact controler to other modules.
