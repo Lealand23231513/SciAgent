@@ -15,7 +15,7 @@ from pydantic import BaseModel, root_validator
 from langchain.schema import Document
 
 
-#TODO:将翻译集成到ArxivAPIWrapper中
+#TODO:将翻译集成到ArxivAPIWrapper中,或者集成到一个chain里
 class ArxivAPIWrapper(BaseModel):
     arxiv_exceptions:tuple = (
                 arxiv.ArxivError,
