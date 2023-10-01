@@ -1,10 +1,8 @@
 """
-
     这个文件里有两个函数: arxiv_auto_search_and_download(top_k_results)和arxiv_auto_search(top_k_results)
     第一个函数提供搜索且下载的功能, 第二个函数仅搜索
     top_k_results参数控制返回文论文的数量
     两个函数的返回参数都是一个python字典, 都包含'title'和'arxiv_id'(字面意思)
-
 """
 import arxiv
 import requests
