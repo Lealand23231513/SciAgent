@@ -73,14 +73,6 @@ def download_arxiv_pdf(arxiv_id, ori_name:str, folder_name:str):
     else:
         print(f'下载失败，HTTP状态码: {response.status_code}')
 
-# def get_completion(prompt, model="gpt-3.5-turbo"):
-#     messages = [{"role": "user", "content": prompt}]
-#     response = openai.ChatCompletion.create(
-#         model=model,
-#         messages=messages,
-#         temperature=0,
-#     )
-#     return response.choices[0].message["content"]
 
 def arxiv_auto_search_and_download(query:str, download:bool = False, top_k_results=3) -> list[dict[str, str]] | str | None:
 
