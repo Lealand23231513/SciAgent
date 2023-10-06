@@ -1,9 +1,3 @@
-"""
-    这个文件里有两个函数: arxiv_auto_search_and_download(top_k_results)和arxiv_auto_search(top_k_results)
-    第一个函数提供搜索且下载的功能, 第二个函数仅搜索
-    top_k_results参数控制返回文论文的数量
-    两个函数的返回参数都是一个python字典, 都包含'title'和'arxiv_id'(字面意思)
-"""
 import arxiv
 import requests
 import openai
@@ -15,7 +9,6 @@ from pydantic import BaseModel, root_validator
 from langchain.schema import Document
 
 
-#TODO:将翻译集成到ArxivAPIWrapper中,或者集成到一个chain里
 class ArxivAPIWrapper(BaseModel):
     arxiv_exceptions:tuple = (
                 arxiv.ArxivError,
@@ -28,20 +21,10 @@ class ArxivAPIWrapper(BaseModel):
     load_max_docs: int = 100
     load_all_available_meta: bool = False
     doc_content_chars_max: Optional[int] = 40000
+    
 
     def run(self, query: str) -> list[dict[str, str]] | str:
-        """
-        Performs an arxiv search and A single string
-        with the publish date, title, authors, and summary
-        for each article separated by two newlines.
 
-        If an error occurs or no documents found, error text
-        is returned instead. Wrapper for
-        https://lukasschwab.me/arxiv.py/index.html#Search
-
-        Args:
-            query: a plaintext search query
-        """  # noqa: E501
         try:
             results = arxiv.Search(  
                 query[: self.ARXIV_MAX_QUERY_LENGTH], max_results=self.top_k_results
@@ -99,19 +82,18 @@ def download_arxiv_pdf(arxiv_id, ori_name:str, folder_name:str):
 #     )
 #     return response.choices[0].message["content"]
 
-def arxiv_auto_search_and_download(query:str, download:bool = False, top_k_results:int=3) -> list[dict[str, str]] | str | None:
+def arxiv_auto_search_and_download(query:str, download:bool = False, top_k_results=3) -> list[dict[str, str]] | str | None:
 
     openai.api_key = os.environ["OPENAI_API_KEY"]
 
-    # 获取用户输入并翻译成英文
-
-    # query = input(f"您好! 我是您的论文下载助手。\n\
-    # 请输入您想下载的论文的所属领域(单词即可，可以使用任意一种语言)，我会自动查阅在Arxiv托管的论文中的相关论文并为您下载相关度最高的{top_k_results}篇(如果有那么多的话)到当前目录：\n")
-
-    # prompt = f"""
-    # 请你将该单词翻译成英文，并且只返回翻译后的英文单词：{query}
-    # """
-    # question = get_completion(query)
+    prompt = f"""请你将该单词翻译成英文，并且只返回翻译后的英文单词：{query}"""
+    messages = [{"role": "user", "content": prompt}] 
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=messages,
+        temperature=0,
+    )
+    query = response.choices[0].message["content"]
 
     arxiv_wrapper = ArxivAPIWrapper(top_k_results=top_k_results)
     arxiv_result = arxiv_wrapper.run(f"""{query}""")
