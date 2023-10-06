@@ -1,9 +1,26 @@
 [
     {
-        "name": "search and download",
+        "name": "search_and_download",
         "function": {
-            "search": "Based on user input, search for relevant papers on arxiv.",
-            "download": "Download papers if user need."
+            "arxiv_auto_search_and_download": {
+                "description":"Based on user input, search relevant papers on arxiv. If parameter \"download\" is True, than download the found papers.",
+                "parameter":{
+                    "query":{
+                        "type":"str",
+                        "description":""
+                    },
+                    "download":{
+                        "type":"bool",
+                        "default":"True",
+                        "description":"If set 'True', download the found papers."
+                    },
+                    "top_k_results":{
+                        "type":"int",
+                        "default":"3",
+                        "description":"Download the most relevant top_k_results article (if there are so many)"
+                    }
+                }
+            }
         }
     },
     {
@@ -14,8 +31,8 @@
     },
     {
         "name": "relevant research",
-        "function":{
-            "related_work" : "Generate relevant field research situation."
+        "function": {
+            "related_work": "Generate relevant field research situation."
         }
     }
 ]

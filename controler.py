@@ -73,7 +73,10 @@ chain = LLMChain(
     prompt=chat_prompt,
     output_parser=output_parser
 )
+user_input = user2_input
 response = chain.run(user2_input)
+# response = json.loads(response)
+print(response)
 
 
 

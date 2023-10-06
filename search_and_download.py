@@ -99,7 +99,7 @@ def download_arxiv_pdf(arxiv_id, ori_name:str, folder_name:str):
 #     )
 #     return response.choices[0].message["content"]
 
-def arxiv_auto_search_and_download(query:str, download:bool = False, top_k_results=3) -> list[dict[str, str]] | str | None:
+def arxiv_auto_search_and_download(query:str, download:bool = False, top_k_results:int=3) -> list[dict[str, str]] | str | None:
 
     openai.api_key = os.environ["OPENAI_API_KEY"]
 
