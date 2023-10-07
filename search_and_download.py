@@ -112,29 +112,6 @@ def arxiv_auto_search_and_download(query:str, download:bool = False, top_k_resul
 
 def search_and_download(user_input:str):
     messages = [{"role": "user", "content": f"{user_input}"}]
-    # functions = [{
-    #             "name":"arxiv_auto_search_and_download", 
-    #             "description":"Based on user input, search relevant papers on arxiv. If parameter \"download\" is True, than download the found papers.",
-    #             "parameters":{
-    #                 "type":"object",
-    #                 "properties":{
-    #                     "query":{
-    #                         "type":"string",
-    #                         "description":"Related information of the papers that the user wants to find."
-    #                     },
-    #                     "download":{
-    #                         "type":"boolean",
-    #                         "description":"If true, download the found papers, if false, not download. This is an optional parameter, and default option is false."
-    #                     },
-    #                     "top_k_results":{
-    #                         "type":"integer",
-    #                         "description":"The most relevant top_k_results article (if there are so many). This is an optional parameter, and default option is 3. This parameter takes effect only when \"download\" is set true."
-    #                     }
-    #                 },
-    #                 "required":["query"]
-    #             }
-            
-    #     }]
     with open('modules.json', "r") as f:
         module_descriptions = json.load(f)
     functions = module_descriptions[0]["functions"]
