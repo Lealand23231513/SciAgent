@@ -109,3 +109,52 @@ def arxiv_auto_search_and_download(query:str, download:bool = False, top_k_resul
             download_arxiv_pdf(sub_dict["arxiv_id"], sub_dict["Title"], query)
 
     return arxiv_result
+
+def search_and_download(user_input:str):
+    messages = [{"role": "user", "content": f"{user_input}"}]
+    # functions = [{
+    #             "name":"arxiv_auto_search_and_download", 
+    #             "description":"Based on user input, search relevant papers on arxiv. If parameter \"download\" is True, than download the found papers.",
+    #             "parameters":{
+    #                 "type":"object",
+    #                 "properties":{
+    #                     "query":{
+    #                         "type":"string",
+    #                         "description":"Related information of the papers that the user wants to find."
+    #                     },
+    #                     "download":{
+    #                         "type":"boolean",
+    #                         "description":"If true, download the found papers, if false, not download. This is an optional parameter, and default option is false."
+    #                     },
+    #                     "top_k_results":{
+    #                         "type":"integer",
+    #                         "description":"The most relevant top_k_results article (if there are so many). This is an optional parameter, and default option is 3. This parameter takes effect only when \"download\" is set true."
+    #                     }
+    #                 },
+    #                 "required":["query"]
+    #             }
+            
+    #     }]
+    with open('modules.json', "r") as f:
+        module_descriptions = json.load(f)
+    functions = module_descriptions[0]["functions"]
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo-0613",
+        temperature = 0,
+        messages=messages,
+        functions=functions,
+        function_call="auto",  # auto is default, but we'll be explicit
+    )
+    response_message = response["choices"][0]["message"]
+    if response_message.get("function_call"):
+        function_args = json.loads(response_message["function_call"]["arguments"])
+        print(function_args)
+        arg_download = function_args.get("download")
+        arg_top_k_results = function_args.get("top_k_results")
+        arxiv_result = arxiv_auto_search_and_download(query = function_args.get("query"),
+                                                      download=arg_download if arg_download is not None else False,
+                                                      top_k_results=arg_top_k_results if arg_top_k_results is not None else 3)
+        return arxiv_result
+    else:
+        
+        return None

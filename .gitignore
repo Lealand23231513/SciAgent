@@ -3,3 +3,4 @@ test.*
 .vscode
 test*.*
 test*
+__pycache__

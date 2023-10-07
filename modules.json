@@ -1,38 +1,49 @@
 [
     {
         "name": "search_and_download",
-        "function": {
-            "arxiv_auto_search_and_download": {
-                "description":"Based on user input, search relevant papers on arxiv. If parameter \"download\" is True, than download the found papers.",
-                "parameter":{
-                    "query":{
-                        "type":"str",
-                        "description":""
+        "functions": [
+            {
+                "name": "arxiv_auto_search_and_download",
+                "description": "Based on user input, search relevant papers on arxiv. If parameter \"download\" is True, than download the found papers.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Related information of the papers that the user wants to find."
+                        },
+                        "download": {
+                            "type": "boolean",
+                            "description": "If true, download the found papers, if false, not download. This is an optional parameter, and default option is false."
+                        },
+                        "top_k_results": {
+                            "type": "integer",
+                            "description": "The most relevant top_k_results article (if there are so many). This is an optional parameter, and default option is 3. This parameter takes effect only when \"download\" is set true."
+                        }
                     },
-                    "download":{
-                        "type":"bool",
-                        "default":"True",
-                        "description":"If set 'True', download the found papers."
-                    },
-                    "top_k_results":{
-                        "type":"int",
-                        "default":"3",
-                        "description":"Download the most relevant top_k_results article (if there are so many)"
-                    }
+                    "required": [
+                        "query"
+                    ]
                 }
             }
-        }
+        ]
     },
     {
         "name": "summarizer",
-        "function": {
-            "summarize": "Summarize the content of the paper(in PDF format)."
-        }
+        "functions": [
+            {
+                "name": "summarizer",
+                "description": "Summarize the content of the paper(in PDF format)."
+            }
+        ]
     },
     {
         "name": "relevant research",
-        "function": {
-            "related_work": "Generate relevant field research situation."
-        }
+        "functions": [
+            {
+                "name": "related_work",
+                "description": "Generate relevant field research situation."
+            }
+        ]
     }
 ]
