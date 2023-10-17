@@ -1,66 +1,75 @@
 import gradio as gr
 import pdfplumber
+import openai
+from controler import main_for_test
 
-# 初始化对话历史记录列表
-chat_history = []
+# 设置你的API密钥
+api_key = ''
+openai.api_key = api_key
 
-# 定义一个函数，用于回应用户的消息
-def chat_with_ai(user_message, uploaded_file, chat_option):
-    
-    # 初始化回应
-    ai_response = "AI: This is an example."
-
-    # 处理上传的PDF文件
-    if uploaded_file is not None:
-        try:
-            pdf_path = uploaded_file.value
-            with pdfplumber.open(pdf_path) as pdf:
-                text = ''
-                for page in pdf.pages:
-                    text += page.extract_text()
-            # 在这里处理PDF文件文本，可以根据需要修改回应
-        except Exception as e:
-            ai_response = f"AI: An error occurred while processing the PDF file: {str(e)}"
-    
-    # 将用户输入和AI回应添加到历史记录
-    chat_history.append(f"User: {user_message}")
-    chat_history.append(f"AI:{ai_response}")
-
-    # 根据下拉选项，决定显示的对话记录
-    if chat_option == "新的对话":
-        ai_response = ""
-    elif chat_option == "历史记录":
-        full_chat = "\n".join(chat_history)
-        ai_response = full_chat
-
-    return ai_response
+# 初始化总的对话历史记录列表和当前轮对话历史记录列表
+full_chat_history = []
+current_chat_history = []
 
 
 def submit(user_message):
-    ai_response = gr.Textbox(label="SciAgent:", value=chat_with_ai(user_message,None,chat_option)) 
-    return ai_response
+    global current_chat_history
+    # 将用户输入添加到当前轮对话历史记录
+    current_chat_history.append(f"User: {user_message}")
+    responses = ''
+    for response in main_for_test(user_message):
+        responses += ' '
+        responses += response
+    return responses
+
+
+def clear():
+    return ''
+
+
+def history():
+    full_chat = "\n".join(full_chat_history)
+    return full_chat
+
+def stock():
+    global full_chat_history
+    global current_chat_history
+    
+    # 将当前轮对话历史记录加入总的对话历史记录
+    full_chat_history.append("------------------------------------------")
+    full_chat_history.extend(current_chat_history)
+    
+    # 清空当前轮对话历史记录
+    current_chat_history = []  
+    return None
+
+
 
 
 
 with gr.Blocks(title='SciAgent') as demo:  # 设置页面标题为'SciAgent'
+    gr.Markdown("Start typing below and then click **Submit** to see the output.")
     with gr.Column():
         with gr.Row():
-            chat_option = gr.Button("新的对话")
-            chat_option = gr.Button("历史记录")
+            new_chat_button = gr.Button("New Chat")
+            history_chat_button = gr.Button("Chat History")
         with gr.Tab('对话'):
             user_input = gr.Textbox(label="你的信息:", placeholder="请在这里输入")
+            
             with gr.Row():
-                clear_button = gr.Button("清空")
-                submit_button = gr.Button("提交")
+                clear_button = gr.Button("Clear")
+                submit_button = gr.Button("Submit")
                 
-                
+            
             ai_response = gr.Textbox(label="SciAgent:", value='')
-            
-            submit_button.click(submit, inputs = [user_input], outputs=[ai_response])
-            
-            
-
-            
+            clear_button.click(fn = clear, inputs = None, outputs=[user_input])
+            submit_button.click(fn = submit, inputs = [user_input], outputs=[ai_response])
+            submit_button.click(fn = clear, inputs = None, outputs=[user_input])
+        
+        new_chat_button.click(fn = stock, inputs = None, outputs = None)
+        new_chat_button.click(fn = clear, inputs = None, outputs = [user_input])
+        new_chat_button.click(fn = clear, inputs = None, outputs = [ai_response])
+        history_chat_button.click(fn = history, inputs = None, outputs = [ai_response])
             
             
         with gr.Tab('文件传输'):
@@ -70,6 +79,3 @@ with gr.Blocks(title='SciAgent') as demo:  # 设置页面标题为'SciAgent'
 
 # 启动Gradio界面
 demo.queue().launch(share=False, inbrowser=True)
-
-
-#问题：Button“清空”功能没实现，chat_option不知道怎么设计逻辑用到ai_response里面,Button“提交”返回的不是我设定的默认值（大概是系统默认的）
