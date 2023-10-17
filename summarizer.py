@@ -5,7 +5,7 @@ from langchain.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain.prompts import PromptTemplate
 
 import os
-os.environ["OPENAI_API_KEY"] = "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"
+os.environ["OPENAI_API_KEY"] = 
 
 def summarizer(path:str):
 
