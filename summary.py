@@ -6,7 +6,7 @@ from langchain.prompts import PromptTemplate
 
 import os
 import sys
-os.environ["OPENAI_API_KEY"] = "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"
+os.environ["OPENAI_API_KEY"] = 
 
 path = input("输入你要进行概括的论文路径（支持pdf和word版）:")
 if(path.split(".")[-1] == 'pdf'):

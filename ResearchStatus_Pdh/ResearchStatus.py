@@ -4,7 +4,7 @@ pip install arxiv
 pip install pymupdf
 pip install openai
 import os
-os.environ["OPENAI_API_KEY"] = "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 "
+os.environ["OPENAI_API_KEY"] = 
 from langchain.llms import OpenAI
 from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
