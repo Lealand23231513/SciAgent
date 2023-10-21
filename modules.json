@@ -37,13 +37,13 @@
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "filename": {
+                        "path": {
                             "type": "string",
                             "description": "The name of the paper to summarize."
                         }
                     },
                     "required": [
-                        "filename"
+                        "path"
                     ]
                 }
             }

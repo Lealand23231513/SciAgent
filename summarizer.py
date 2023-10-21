@@ -8,11 +8,12 @@ import os
 import json
 import openai
 
-DEFAULT_PATH = "./.cache"
+# DEFAULT_PATH = "./.cache"
 
-def summary(filename:str):
-    path = os.path.normpath(os.path.join(DEFAULT_PATH,filename))
-    print(path)
+def summary(path:str):
+    '''
+    :param: path: path of the file.
+    '''
     if(path.split(".")[-1] == 'pdf'):
         loader = PyPDFLoader(path)
     elif(path.split(".")[-1] == 'docx'):
@@ -57,7 +58,7 @@ def summarizer(user_input:str):
     if response_message.get("function_call"):
         function_args = json.loads(response_message["function_call"]["arguments"])
         print(function_args)
-        summary_result = summary(filename= function_args.get("filename"))
+        summary_result = summary(path= function_args.get("filename"))
         return summary_result
     else:
         
