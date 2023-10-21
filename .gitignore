@@ -4,3 +4,4 @@ test.*
 test*.*
 test*
 __pycache__
+.*

@@ -32,8 +32,20 @@
         "name": "summarizer",
         "functions": [
             {
-                "name": "summarizer",
-                "description": "Summarize the content of the paper(in PDF format)."
+                "name": "summary",
+                "description": "Summarize the content of the paper(in PDF or Word format).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "filename": {
+                            "type": "string",
+                            "description": "The name of the paper to summarize."
+                        }
+                    },
+                    "required": [
+                        "filename"
+                    ]
+                }
             }
         ]
     },

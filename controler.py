@@ -9,11 +9,11 @@ from langchain.prompts.chat import (
     SystemMessagePromptTemplate,
     HumanMessagePromptTemplate,
 )
-from langchain import ConversationChain
 from langchain.chains import LLMChain
 from langchain.schema import BaseOutputParser
 from langchain.output_parsers import StructuredOutputParser, ResponseSchema
-from search_and_download import arxiv_auto_search_and_download, search_and_download
+from search_and_download import search_and_download
+from summarizer import summarizer
 
 # define output_parser
 class ModuleOutputParser(BaseOutputParser):
@@ -49,7 +49,7 @@ def main(user_input:str):
     user1_input = "I want to find some papers about LLM."
     user2_input = "I want to write a review about LLM, and I wonder what papers can I refer to? And please write me a summary about the papers."
 
-    user_input = user2_input
+    # user_input = user2_input
     
 
     # define chat prompt
@@ -82,10 +82,11 @@ def main(user_input:str):
     response = chain.run(user_input)
     for mission in response:
         if mission["name"] == "search_and_download":
-            if mission["function"] == "arxiv_auto_search_and_download":
-                response_message = search_and_download(user_input)
-                print(response_message)
-                yield response_message
+            response_message = search_and_download(user_input)
+            print(response_message)
+            yield response_message
+        # elif mission["name"] == "summarizer":
+        #     response_message = summarizer()
 
 def main_for_test(user_input:str):
     '''

@@ -1,7 +1,7 @@
 import gradio as gr
 import pdfplumber
 import openai
-from controler import main_for_test
+from controler import main_for_test,main
 
 # 设置你的API密钥
 api_key = ''
@@ -17,7 +17,7 @@ def submit(user_message):
     # 将用户输入添加到当前轮对话历史记录
     current_chat_history.append(f"User: {user_message}")
     responses = ''
-    for response in main_for_test(user_message):
+    for response in main(user_message):
         responses += ' '
         responses += response
     return responses

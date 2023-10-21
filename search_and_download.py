@@ -122,7 +122,7 @@ def search_and_download(user_input:str):
         functions=functions,
         function_call="auto",  # auto is default, but we'll be explicit
     )
-    response_message = response["choices"][0]["message"]
+    response_message = response[0]["message"]
     if response_message.get("function_call"):
         function_args = json.loads(response_message["function_call"]["arguments"])
         print(function_args)
@@ -131,7 +131,7 @@ def search_and_download(user_input:str):
         arxiv_result = arxiv_auto_search_and_download(query = function_args.get("query"),
                                                       download=arg_download if arg_download is not None else False,
                                                       top_k_results=arg_top_k_results if arg_top_k_results is not None else 3)
-        return arxiv_result
+        return str(arxiv_result)
     else:
         
-        return None
+        return "Sorry, I have not found any paper about your subject."
