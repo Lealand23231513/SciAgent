@@ -3,11 +3,12 @@ import requests
 import openai
 import json
 import os
+from pathlib import Path
+from urllib import parse
 from typing import Any, Dict, List, Optional, Union, ClassVar
 
 from pydantic import BaseModel, root_validator
 from langchain.schema import Document
-
 
 class ArxivAPIWrapper(BaseModel):
     arxiv_exceptions:tuple = (
@@ -23,14 +24,15 @@ class ArxivAPIWrapper(BaseModel):
     doc_content_chars_max: Optional[int] = 40000
     
 
-    def run(self, query: str) -> list[dict[str, str]] | str:
+    def run(self, query: str) -> list[dict[str, str]]:
 
         try:
             results = arxiv.Search(  
                 query[: self.ARXIV_MAX_QUERY_LENGTH], max_results=self.top_k_results 
             ).results()
         except self.arxiv_exceptions as ex:
-            return f"Arxiv exception: {ex}"
+            print(f"Arxiv exception: {ex}")
+            return []
         docs = [
             {
                 "Title": result.title,
@@ -39,47 +41,31 @@ class ArxivAPIWrapper(BaseModel):
             }
             for result in results
         ]
+        return docs
 
-        if docs:
-            return docs
-        else:
-            return "No good Arxiv Result was found"
-
-def download_arxiv_pdf(arxiv_id, ori_name:str, folder_name:str):
+def download_arxiv_pdf(arxiv_id, file_path:Path|str):
     pdf_url = 'https://arxiv.org/pdf/' + arxiv_id + '.pdf'
     response = requests.get(pdf_url)
     if response.status_code == 200:
-        # 定义一个字符映射表并创建翻译表，用来替换文件名中不能出现的字符
-        char_mapping = {
-            '\\': ' ',
-            '/': ' ',
-            '?': ' ',
-            ':': ' ',
-            '<': ' ',
-            '>': ' ',
-            '|': ' ',
-            '*': ' ',
-            '"': ' ',
-        }
-        translation_table = str.maketrans(char_mapping)
-
-        if not os.path.exists(folder_name):
-            os.makedirs(folder_name)
-
-        filename = os.path.join(folder_name.translate(translation_table), ori_name.translate(translation_table) + '.pdf')
-
-        with open(filename, 'wb') as pdf_file:
+        with open(file_path, 'wb') as pdf_file:
             pdf_file.write(response.content)
-        print(f'文件 {ori_name.translate(translation_table)}.pdf 下载成功！')
-    else:
-        print(f'下载失败，HTTP状态码: {response.status_code}')
-
+    return response.status_code
     
     
 
 
-def arxiv_auto_search_and_download(query:str, download:bool = True, top_k_results=3) -> list[dict[str, str]] | str | None:
-
+def arxiv_auto_search_and_download(query:str, download:bool = True, top_k_results=3, folder_name = Path("./cache")) -> list[dict[str, str]]:
+    """
+    :return: list of arxiv results 
+    [
+        {
+            "Tiltle":
+            "arxiv_id":
+            "summary":
+            "path":
+        },
+    ]
+    """
     openai.api_key = os.environ["OPENAI_API_KEY"]
 
     prompt = f"""请你将该单词翻译成英文，并且只返回翻译后的英文单词：{query}"""
@@ -94,42 +80,37 @@ def arxiv_auto_search_and_download(query:str, download:bool = True, top_k_result
     arxiv_wrapper = ArxivAPIWrapper(top_k_results=top_k_results)
     arxiv_result = arxiv_wrapper.run(f"""{query}""")
 
-    if type(arxiv_result) == str:
-        print(arxiv_result)
-        return None
     
-    
+    if len(arxiv_result) == 0:
+        return []
+
     print("get results:")
     for i,sub_dict in enumerate(arxiv_result):
+        sub_dict["path"] = ""
         print(f"{i+1}.{json.dumps(sub_dict)}")
 
     # 如果不下载，直接返回
     if download == False:
         return arxiv_result
     
-    folder_name=query
-    same_name_cnt = 1
 
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
-    else:
-        while(os.path.exists(folder_name+f"({str(same_name_cnt)})")):
-            same_name_cnt += 1
-        folder_name+=f"({str(same_name_cnt)})"
-        print(f"当前路径下已存在同名文件夹，故创建新文件夹\"{folder_name}\"")
-    
-    path_entry = {
-        "path":os.getcwd()+f"\\{folder_name}"
-    }
- 
 
     # 循环遍历result中的每个结果并下载论文
     for sub_dict in arxiv_result:
         if type(sub_dict) == dict:
-            download_arxiv_pdf(sub_dict["arxiv_id"], sub_dict["Title"], folder_name)
-
-    arxiv_result.append(path_entry)
-
+            # 使用url编码，避免文件名中出现不能出现的字符
+            trans_file_name = parse.quote(sub_dict["Title"]) + '.pdf'
+            file_path = os.path.join(folder_name,  trans_file_name)
+            status_code = download_arxiv_pdf(sub_dict["arxiv_id"], file_path)
+            if status_code == 200:
+                print(f'文件 {trans_file_name} 下载成功！')
+                sub_dict["path"] = file_path
+            else:
+                print(f'文件 {trans_file_name} 下载失败！HTTP状态码: {status_code}')
+                sub_dict["path"] = ""
+            
     return arxiv_result
 
 def search_and_download(user_input:str):
