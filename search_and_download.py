@@ -110,8 +110,8 @@ def arxiv_auto_search_and_download(query:str, download:bool = False, top_k_resul
 
     return arxiv_result
 
-def search_and_download(user_input:str):
-    messages = [{"role": "user", "content": f"{user_input}"}]
+def search_and_download(messages):
+    
     with open('modules.json', "r") as f:
         module_descriptions = json.load(f)
     functions = module_descriptions[0]["functions"]
@@ -122,7 +122,8 @@ def search_and_download(user_input:str):
         functions=functions,
         function_call="auto",  # auto is default, but we'll be explicit
     )
-    response_message = response[0]["message"]
+    print(response)
+    response_message = response["choices"][0]["message"]
     if response_message.get("function_call"):
         function_args = json.loads(response_message["function_call"]["arguments"])
         print(function_args)

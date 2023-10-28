@@ -33,13 +33,13 @@
         "functions": [
             {
                 "name": "summary",
-                "description": "Summarize the content of the paper(in PDF or Word format).",
+                "description": "Summarize the content of the paper(in PDF or Word format). The papers should be downloaded before summarized.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "path": {
                             "type": "string",
-                            "description": "The name of the paper to summarize."
+                            "description": "The path of the paper to summarize."
                         }
                     },
                     "required": [
