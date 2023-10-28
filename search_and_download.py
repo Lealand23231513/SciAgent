@@ -27,14 +27,15 @@ class ArxivAPIWrapper(BaseModel):
 
         try:
             results = arxiv.Search(  
-                query[: self.ARXIV_MAX_QUERY_LENGTH], max_results=self.top_k_results
+                query[: self.ARXIV_MAX_QUERY_LENGTH], max_results=self.top_k_results 
             ).results()
         except self.arxiv_exceptions as ex:
             return f"Arxiv exception: {ex}"
         docs = [
             {
                 "Title": result.title,
-                "arxiv_id": result.entry_id[21:]
+                "arxiv_id": result.entry_id[21:],
+                "summary": result.summary
             }
             for result in results
         ]
@@ -47,7 +48,6 @@ class ArxivAPIWrapper(BaseModel):
 def download_arxiv_pdf(arxiv_id, ori_name:str, folder_name:str):
     pdf_url = 'https://arxiv.org/pdf/' + arxiv_id + '.pdf'
     response = requests.get(pdf_url)
-
     if response.status_code == 200:
         # 定义一个字符映射表并创建翻译表，用来替换文件名中不能出现的字符
         char_mapping = {
@@ -62,6 +62,7 @@ def download_arxiv_pdf(arxiv_id, ori_name:str, folder_name:str):
             '"': ' ',
         }
         translation_table = str.maketrans(char_mapping)
+
         if not os.path.exists(folder_name):
             os.makedirs(folder_name)
 
@@ -69,12 +70,15 @@ def download_arxiv_pdf(arxiv_id, ori_name:str, folder_name:str):
 
         with open(filename, 'wb') as pdf_file:
             pdf_file.write(response.content)
-        print(f'文件 {filename} 下载成功！')
+        print(f'文件 {ori_name.translate(translation_table)}.pdf 下载成功！')
     else:
         print(f'下载失败，HTTP状态码: {response.status_code}')
 
+    
+    
 
-def arxiv_auto_search_and_download(query:str, download:bool = False, top_k_results=3) -> list[dict[str, str]] | str | None:
+
+def arxiv_auto_search_and_download(query:str, download:bool = True, top_k_results=3) -> list[dict[str, str]] | str | None:
 
     openai.api_key = os.environ["OPENAI_API_KEY"]
 
@@ -102,16 +106,34 @@ def arxiv_auto_search_and_download(query:str, download:bool = False, top_k_resul
     # 如果不下载，直接返回
     if download == False:
         return arxiv_result
+    
+    folder_name=query
+    same_name_cnt = 1
+
+    if not os.path.exists(folder_name):
+        os.makedirs(folder_name)
+    else:
+        while(os.path.exists(folder_name+f"({str(same_name_cnt)})")):
+            same_name_cnt += 1
+        folder_name+=f"({str(same_name_cnt)})"
+        print(f"当前路径下已存在同名文件夹，故创建新文件夹\"{folder_name}\"")
+    
+    path_entry = {
+        "path":os.getcwd()+f"\\{folder_name}"
+    }
+ 
 
     # 循环遍历result中的每个结果并下载论文
     for sub_dict in arxiv_result:
         if type(sub_dict) == dict:
-            download_arxiv_pdf(sub_dict["arxiv_id"], sub_dict["Title"], query)
+            download_arxiv_pdf(sub_dict["arxiv_id"], sub_dict["Title"], folder_name)
+
+    arxiv_result.append(path_entry)
 
     return arxiv_result
 
-def search_and_download(messages):
-    
+def search_and_download(user_input:str):
+    messages = [{"role": "user", "content": f"{user_input}"}]
     with open('modules.json', "r") as f:
         module_descriptions = json.load(f)
     functions = module_descriptions[0]["functions"]
@@ -132,7 +154,6 @@ def search_and_download(messages):
         arxiv_result = arxiv_auto_search_and_download(query = function_args.get("query"),
                                                       download=arg_download if arg_download is not None else False,
                                                       top_k_results=arg_top_k_results if arg_top_k_results is not None else 3)
-        return str(arxiv_result)
+        return arxiv_result
     else:
-        
-        return "Sorry, I have not found any paper about your subject."
+        return None
