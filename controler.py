@@ -84,7 +84,7 @@ def main(user_input:str):
         if mission["name"] == "search_and_download":
             response_message = search_and_download(user_input)
             print(response_message)
-            yield response_message
+            yield str(response_message)
         # elif mission["name"] == "summarizer":
         #     response_message = summarizer()
 
