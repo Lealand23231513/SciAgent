@@ -43,18 +43,34 @@ class ArxivAPIWrapper(BaseModel):
         ]
         return docs
 
-def download_arxiv_pdf(arxiv_id, file_path:Path|str):
-    pdf_url = 'https://arxiv.org/pdf/' + arxiv_id + '.pdf'
-    response = requests.get(pdf_url)
-    if response.status_code == 200:
-        with open(file_path, 'wb') as pdf_file:
-            pdf_file.write(response.content)
-    return response.status_code
-    
-    
+def translator(src:str):
+    prompt = f"Please translate this sentence into English: {src}"
+    messages = [{"role": "user", "content": prompt}] 
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=messages,
+        temperature=0,
+    )
+    return response.choices[0].message["content"]
 
+def fn_args_generator(query:str, functions, history = []):
+    messages = history + [{"role": "user", "content": f"{query}"}]
+    openai.api_key = os.environ["OPENAI_API_KEY"]
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo-0613",
+        temperature = 0,
+        messages=messages,
+        functions=functions,
+        function_call="auto",  
+    )
+    response_message = response["choices"][0]["message"]
+    if response_message.get("function_call"):
+        function_args = json.loads(response_message["function_call"]["arguments"])
+        return function_args
+    else:
+        raise Exception("Not receive function call")
 
-def arxiv_auto_search_and_download(query:str, download:bool = True, top_k_results=3, folder_name = Path("./cache")) -> list[dict[str, str]]:
+def arxiv_auto_search(user_input:str, history = []) -> list[dict[str, str]]:
     """
     :return: list of arxiv results 
     [
@@ -62,79 +78,47 @@ def arxiv_auto_search_and_download(query:str, download:bool = True, top_k_result
             "Tiltle":
             "arxiv_id":
             "summary":
-            "path":
+            "url":
         },
     ]
     """
     openai.api_key = os.environ["OPENAI_API_KEY"]
 
-    prompt = f"""请你将该单词翻译成英文，并且只返回翻译后的英文单词：{query}"""
-    messages = [{"role": "user", "content": prompt}] 
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=messages,
-        temperature=0,
-    )
-    query = response.choices[0].message["content"]
-
-    arxiv_wrapper = ArxivAPIWrapper(top_k_results=top_k_results)
-    arxiv_result = arxiv_wrapper.run(f"""{query}""")
-
-    
-    if len(arxiv_result) == 0:
-        return []
-
-    print("get results:")
-    for i,sub_dict in enumerate(arxiv_result):
-        sub_dict["path"] = ""
-        print(f"{i+1}.{json.dumps(sub_dict)}")
-
-    # 如果不下载，直接返回
-    if download == False:
-        return arxiv_result
-    
-
-    if not os.path.exists(folder_name):
-        os.makedirs(folder_name)
-
-    # 循环遍历result中的每个结果并下载论文
-    for sub_dict in arxiv_result:
-        if type(sub_dict) == dict:
-            # 使用url编码，避免文件名中出现不能出现的字符
-            trans_file_name = parse.quote(sub_dict["Title"]) + '.pdf'
-            file_path = os.path.join(folder_name,  trans_file_name)
-            status_code = download_arxiv_pdf(sub_dict["arxiv_id"], file_path)
-            if status_code == 200:
-                print(f'文件 {trans_file_name} 下载成功！')
-                sub_dict["path"] = file_path
-            else:
-                print(f'文件 {trans_file_name} 下载失败！HTTP状态码: {status_code}')
-                sub_dict["path"] = ""
-            
-    return arxiv_result
-
-def search_and_download(user_input:str):
-    messages = [{"role": "user", "content": f"{user_input}"}]
     with open('modules.json', "r") as f:
         module_descriptions = json.load(f)
     functions = module_descriptions[0]["functions"]
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo-0613",
-        temperature = 0,
-        messages=messages,
-        functions=functions,
-        function_call="auto",  # auto is default, but we'll be explicit
-    )
-    # print(response)
-    response_message = response["choices"][0]["message"]
-    if response_message.get("function_call"):
-        function_args = json.loads(response_message["function_call"]["arguments"])
-        print(function_args)
-        arg_download = function_args.get("download")
-        arg_top_k_results = function_args.get("top_k_results")
-        arxiv_result = arxiv_auto_search_and_download(query = function_args.get("query"),
-                                                      download=arg_download if arg_download is not None else False,
-                                                      top_k_results=arg_top_k_results if arg_top_k_results is not None else 3)
-        return arxiv_result
+    function_args = fn_args_generator(user_input, functions, history)    
+
+    top_k_results = function_args.get("top_k_results")
+    if top_k_results:
+        arxiv_wrapper = ArxivAPIWrapper(top_k_results=top_k_results)
     else:
-        return []
+        arxiv_wrapper = ArxivAPIWrapper()
+    query = function_args.get("query")
+
+    arxiv_result = arxiv_wrapper.run(f"""{query}""")
+    
+    if len(arxiv_result) == 0:
+        raise Exception("No arxiv result found")
+
+    print("get results:")
+    for i,sub_dict in enumerate(arxiv_result):
+        sub_dict["url"] = 'https://arxiv.org/pdf/' + sub_dict["arxiv_id"] + '.pdf'
+        print(f"{i+1}.{json.dumps(sub_dict)}")
+
+    return arxiv_result
+
+def download_arxiv_pdf(paper_info, folder_name = Path("./.cache"), replace_exist = False):
+    trans_file_name = parse.quote(paper_info["Title"]) + '.pdf'
+    file_path = os.path.abspath(os.path.join(folder_name,  trans_file_name))
+    pdf_url = paper_info["url"]
+    response = requests.get(pdf_url)
+    response.raise_for_status() # raise HTTPError
+
+    # 如果文件已经存在，抛出异常，需要用户决定是否下载更换文件
+    #TODO if replace_exist == False and os.path.exists(file_path):
+    #     raise Exception(f"Path {file_path} already exist, do you want to replace it?")
+        
+    with open(file_path, 'wb') as pdf_file:
+        pdf_file.write(response.content)
+    return file_path

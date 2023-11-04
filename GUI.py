@@ -7,71 +7,56 @@ from controler import main_for_test,main
 api_key = ''
 openai.api_key = api_key
 
-# 初始化总的对话历史记录列表和当前轮对话历史记录列表
-full_chat_history = []
-current_chat_history = []
 
+def add_input(user_input, chatbot):
+    chatbot.append((user_input,""))
+    return gr.Textbox(interactive = False, value = '', placeholder = ''), chatbot
 
-def submit(user_message):
-    global current_chat_history
-    # 将用户输入添加到当前轮对话历史记录
-    current_chat_history.append(f"User: {user_message}")
-    responses = ''
-    for response in main(user_message):
-        responses += ' '
-        responses += response
-    return responses
+def submit(chatbot, chat_history):
+    user_input = chatbot[-1][0]
+    chat_history.append(
+        {
+            "role": "user",
+            "content": f"{user_input}"
+        }
+    )
+    full_response = ""
+    for ai_response in main(user_input, chat_history):
+        chat_history += [
+            {
+                "role": "assistant",
+                "content": f"{ai_response}"
+            }
+        ]
+        full_response += ai_response +'\n'
+        chatbot[-1] = (chatbot[-1][0], full_response)
+        yield chatbot, chat_history
+    print("submit end")
 
 
 def clear():
-    return ''
-
-
-def history():
-    full_chat = "\n".join(full_chat_history)
-    return full_chat
-
-def stock():
-    global full_chat_history
-    global current_chat_history
-    
-    # 将当前轮对话历史记录加入总的对话历史记录
-    full_chat_history.append("------------------------------------------")
-    full_chat_history.extend(current_chat_history)
-    
-    # 清空当前轮对话历史记录
-    current_chat_history = []  
-    return None
-
-
-
-
+    return '', [], []
 
 with gr.Blocks(title='SciAgent') as demo:  # 设置页面标题为'SciAgent'
     gr.Markdown("Start typing below and then click **Submit** to see the output.")
     with gr.Column():
-        with gr.Row():
-            new_chat_button = gr.Button("New Chat")
-            history_chat_button = gr.Button("Chat History")
+
         with gr.Tab('对话'):
+            chatbot = gr.Chatbot(label="SciAgent")
             user_input = gr.Textbox(label="你的信息:", placeholder="请在这里输入")
-            
+            chat_history = gr.State([])
             with gr.Row():
                 clear_button = gr.Button("Clear")
                 submit_button = gr.Button("Submit")
                 
             
-            ai_response = gr.Textbox(label="SciAgent:", value='')
-            clear_button.click(fn = clear, inputs = None, outputs=[user_input])
-            submit_button.click(fn = submit, inputs = [user_input], outputs=[ai_response])
-            submit_button.click(fn = clear, inputs = None, outputs=[user_input])
+            clear_button.click(fn = clear, inputs = None, outputs=[user_input, chatbot, chat_history])
+            submit_button.click(fn = add_input, inputs=[user_input, chatbot], outputs = [user_input, chatbot], queue = False).then(
+                fn = submit, inputs = [chatbot, chat_history], outputs=[chatbot, chat_history]
+            ).then(
+                fn = lambda : gr.Textbox(label="你的信息:", interactive=True, placeholder="请在这里输入"), inputs = None, outputs = [user_input], queue = False
+            )
         
-        new_chat_button.click(fn = stock, inputs = None, outputs = None)
-        new_chat_button.click(fn = clear, inputs = None, outputs = [user_input])
-        new_chat_button.click(fn = clear, inputs = None, outputs = [ai_response])
-        history_chat_button.click(fn = history, inputs = None, outputs = [ai_response])
-            
-            
         with gr.Tab('文件传输'):
             uploaded_file = gr.File(label="上传PDF文件", type="file")  # 允许上传PDF文件
             ai_response_file = gr.Textbox(label="SciAgent:",placeholder="SciAgent 将会给出概括", value='')
