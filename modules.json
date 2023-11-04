@@ -3,18 +3,14 @@
         "name": "search_and_download",
         "functions": [
             {
-                "name": "arxiv_auto_search_and_download",
-                "description": "Based on user input, search relevant papers on arxiv. If parameter \"download\" is True, than download the found papers.",
+                "name": "arxiv_auto_search",
+                "description": "Based on user input, search relevant papers on arxiv. This function will not download the papers.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "query": {
                             "type": "string",
                             "description": "Related information of the papers that the user wants to find."
-                        },
-                        "download": {
-                            "type": "boolean",
-                            "description": "If true, download the found papers, if false, not download. This is an optional parameter, and default option is false."
                         },
                         "top_k_results": {
                             "type": "integer",

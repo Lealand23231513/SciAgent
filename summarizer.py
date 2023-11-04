@@ -3,7 +3,7 @@ from langchain.chains.summarize import load_summarize_chain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain.prompts import PromptTemplate
-
+from search_and_download import download_arxiv_pdf
 import os
 import json
 import openai
@@ -40,29 +40,15 @@ def summary(path:str):
     chain = load_summarize_chain(llm, chain_type="map_reduce", return_intermediate_steps=False, map_prompt=PROMPT, combine_prompt=PROMPT)
     summary_result = chain({"input_documents": docs}, return_only_outputs=True)["output_text"]
     return summary_result
-def summarizer(user_input:str):
-    #TODO 还没想好应该怎么处理
-    return None
-    messages = [{"role": "user", "content": f"{user_input}"}]
-    with open('modules.json', "r") as f:
-        module_descriptions = json.load(f)
-    functions = module_descriptions[1]["functions"]
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo-0613",
-        temperature = 0,
-        messages=messages,
-        functions=functions,
-        function_call="auto",  # auto is default, but we'll be explicit
-    )
-    response_message = response["choices"][0]["message"]
-    if response_message.get("function_call"):
-        function_args = json.loads(response_message["function_call"]["arguments"])
-        print(function_args)
-        summary_result = summary(path= function_args.get("filename"))
-        return summary_result
-    else:
-        
-        return None
+def summarizer(papers_info):
+    ai_response = []
+    for i,paper_info in enumerate(papers_info):
+        file_path = download_arxiv_pdf(paper_info)
+        papers_info[i]["path"] = file_path
+        summary_result = summary(file_path)
+        ai_response.append(f"Succesfully download <{paper_info['Title']}> into {file_path} !\n The summary result is as below:\n{summary_result}")
+    return "\n".join(ai_response)
+    
 if __name__ == '__main__':
     from dotenv import load_dotenv
     load_dotenv()
