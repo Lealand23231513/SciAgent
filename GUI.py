@@ -1,11 +1,6 @@
 import gradio as gr
-import pdfplumber
-import openai
 from controler import main_for_test,main
 
-# 设置你的API密钥
-api_key = ''
-openai.api_key = api_key
 
 
 def add_input(user_input, chatbot):
