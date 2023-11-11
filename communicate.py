@@ -7,7 +7,7 @@ from langchain.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain.prompts import PromptTemplate
 
 import os
-os.environ["OPENAI_API_KEY"] = "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"
+os.environ["OPENAI_API_KEY"] = ""
 
 template_1 = """Write a summary of this paper,
 which should contain introduction of research process and achievements, and the innovation or breakthrough in the research field:
