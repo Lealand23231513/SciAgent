@@ -37,45 +37,65 @@ Assistant:
 
 """
 
-path = "C:/Pythonfiles/langchain_try/summary/test_paper/rt2.pdf"
-if(path.split(".")[-1] == 'pdf'):
-    loader = PyPDFLoader(path)
-elif(path.split(".")[-1] == 'docx'):
-    loader = Docx2txtLoader(path)
-else:
-    print("论文文件格式错误")
-    os._exit(0)
+def communicate(path:str, question:str):
 
-documents = loader.load()
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
-docs = text_splitter.split_documents(documents)
+    if(path.split(".")[-1] == 'pdf'):
+        loader = PyPDFLoader(path)
+    elif(path.split(".")[-1] == 'docx'):
+        loader = Docx2txtLoader(path)
+    else:
+        print("论文文件格式错误")
+        os._exit(0)
 
-prompt_1 = PromptTemplate(
-    template=template_1, 
-    input_variables=["text"]
-)
+    documents = loader.load()
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
+    docs = text_splitter.split_documents(documents)
 
-chain = load_summarize_chain(
-    llm = OpenAI(temperature=0.2, max_tokens=1000, model="gpt-3.5-turbo-instruct"), 
-    chain_type="map_reduce", 
-    return_intermediate_steps=False, 
-    map_prompt=prompt_1, 
-    combine_prompt=prompt_1
-)
-summary = chain({"input_documents": docs}, return_only_outputs=True)["output_text"]
+    prompt_1 = PromptTemplate(
+        template=template_1, 
+        input_variables=["text"]
+    )
 
-prompt_2 = PromptTemplate(
-    input_variables=["history", "human_input"], 
-    template=template_2
-)
- 
-chatgpt_chain = LLMChain(
-    llm=OpenAI(temperature=0, model="gpt-3.5-turbo-instruct"), 
-    prompt=prompt_2, 
-    verbose=True, 
-    memory=ConversationBufferWindowMemory(k=2),
-)
-question = "Please introduce the research achievement of this paper."
-input_key = "Summary:\n " + summary + "\n" + "Human's question:\n" + question
-output = chatgpt_chain.predict(human_input=input_key)
-print(output)
+    chain = load_summarize_chain(
+        llm = OpenAI(temperature=0.2, max_tokens=1000, model="gpt-3.5-turbo-instruct"), 
+        chain_type="map_reduce", 
+        return_intermediate_steps=False, 
+        map_prompt=prompt_1, 
+        combine_prompt=prompt_1
+    )
+    summary = chain({"input_documents": docs}, return_only_outputs=True)["output_text"]
+
+    prompt_2 = PromptTemplate(
+        input_variables=["history", "human_input"], 
+        template=template_2
+    )
+    
+    chatgpt_chain = LLMChain(
+        llm=OpenAI(temperature=0, model="gpt-3.5-turbo-instruct"), 
+        prompt=prompt_2, 
+        verbose=True, 
+        memory=ConversationBufferWindowMemory(k=2),
+    )
+
+    question = "Please introduce the research achievement of this paper."
+    input_key = "Summary:\n " + summary + "\n" + "Human's question:\n" + question
+    output = chatgpt_chain.predict(human_input=input_key)
+
+    return output
+
+def summarizer(papers_info):
+    ai_response = []
+    for i,paper_info in enumerate(papers_info):
+        file_path = download_arxiv_pdf(paper_info)
+        papers_info[i]["path"] = file_path
+        #communicate_result = communicate(file_path, "question")
+        ai_response.append(f"Succesfully download <{paper_info['Title']}> into {file_path} !\n The summary result is as below:\n{summary_result}")
+    return "\n".join(ai_response)
+    
+if __name__ == '__main__':
+    from dotenv import load_dotenv
+    load_dotenv()
+    test_file = "TEST  Text Prototype Aligned Embedding to Activate LLM's Ability for Time Series.pdf"
+    #communicate_result = communicate(file_path, "question")
+    print(summary_result)
+    #summary("C:\Pythonfiles\langchain_try\summary\\test_paper\Attention Is All You Need.pdf")
