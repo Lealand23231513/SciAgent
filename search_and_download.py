@@ -5,10 +5,24 @@ import json
 import os
 from pathlib import Path
 from urllib import parse
+from enum import Enum
 from typing import Any, Dict, List, Optional, Union, ClassVar
 
 from pydantic import BaseModel, root_validator
 from langchain.schema import Document
+
+class SortCriterion(Enum):
+
+    Relevance = "relevance"
+    LastUpdatedDate = "lastUpdatedDate"
+    SubmittedDate = "submittedDate"
+
+
+class SortOrder(Enum):
+
+    Ascending = "ascending"
+    Descending = "descending"
+
 
 class ArxivAPIWrapper(BaseModel):
     arxiv_exceptions:tuple = (
@@ -24,11 +38,11 @@ class ArxivAPIWrapper(BaseModel):
     doc_content_chars_max: Optional[int] = 40000
     
 
-    def run(self, query: str) -> list[dict[str, str]]:
+    def run(self, query:str,sort_by:SortCriterion, sort_order:SortOrder) -> list[dict[str, str]]:
 
         try:
             results = arxiv.Search(  
-                query[: self.ARXIV_MAX_QUERY_LENGTH], max_results=self.top_k_results 
+                query[: self.ARXIV_MAX_QUERY_LENGTH], max_results=self.top_k_results, sort_by=sort_by, sort_order=sort_order
             ).results()
         except self.arxiv_exceptions as ex:
             print(f"Arxiv exception: {ex}")
@@ -70,7 +84,7 @@ def fn_args_generator(query:str, functions, history = []):
     else:
         raise Exception("Not receive function call")
 
-def arxiv_auto_search(user_input:str, history = []) -> list[dict[str, str]]:
+def arxiv_auto_search(sort_by:SortCriterion, sort_order:SortOrder,user_input:str, history = []) -> list[dict[str, str]]:
     """
     :return: list of arxiv results 
     [
@@ -91,12 +105,12 @@ def arxiv_auto_search(user_input:str, history = []) -> list[dict[str, str]]:
 
     top_k_results = function_args.get("top_k_results")
     if top_k_results:
-        arxiv_wrapper = ArxivAPIWrapper(top_k_results=top_k_results)
+        arxiv_wrapper = ArxivAPIWrapper(top_k_results=top_k_results,sort_by=sort_by,sort_order=sort_order)
     else:
         arxiv_wrapper = ArxivAPIWrapper()
     query = function_args.get("query")
 
-    arxiv_result = arxiv_wrapper.run(f"""{query}""")
+    arxiv_result = arxiv_wrapper.run(f"""{query}""",sort_by,sort_order)
     
     if len(arxiv_result) == 0:
         raise Exception("No arxiv result found")
