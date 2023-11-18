@@ -46,6 +46,31 @@
         ]
     },
     {
+        "name": "communicate",
+        "functions": [
+            {
+                "name": "communicate",
+                "description": "Summarize the content of the paper(in PDF or Word format), and answer questions raised by human about this paper.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "The path of the paper to summarize."
+                        },
+                        "question": {
+                            "type": "string",
+                            "description": "The question about paper to answer."
+                        }
+                    },
+                    "required": [
+                        "path", "question"
+                    ]
+                }
+            }
+        ]
+    },
+    {
         "name": "relevant research",
         "functions": [
             {
