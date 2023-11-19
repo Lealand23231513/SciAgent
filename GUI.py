@@ -1,5 +1,7 @@
 import gradio as gr
+import logging
 from controler import main_for_test,main
+from pathlib import Path
 
 
 
@@ -26,7 +28,7 @@ def submit(chatbot, chat_history):
         full_response += ai_response +'\n'
         chatbot[-1] = (chatbot[-1][0], full_response)
         yield chatbot, chat_history
-    print("submit end")
+    logger.info("submit end")
 
 
 def clear():
@@ -58,4 +60,8 @@ with gr.Blocks(title='SciAgent') as demo:  # 设置页面标题为'SciAgent'
 
 
 # 启动Gradio界面
-demo.queue().launch(share=False, inbrowser=True)
+if __name__ == '__main__':
+    logging.basicConfig(level = logging.INFO,format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logger = logging.getLogger(Path(__file__).stem)
+    logger.info('SciAgent start!')
+    x = demo.queue().launch(share=False, inbrowser=True)

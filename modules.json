@@ -1,6 +1,11 @@
 [
     {
+        "name":"chatonly",
+        "description": "Chat with the user. This module is available if and only if no other module is available."
+    },
+    {
         "name": "search_and_download",
+        "description": "Search papers. Download apis are also included in this module.",
         "functions": [
             {
                 "name": "arxiv_auto_search",
@@ -26,6 +31,7 @@
     },
     {
         "name": "summarizer",
+        "description": "Summarize the paper.",
         "functions": [
             {
                 "name": "summary",

@@ -3,6 +3,7 @@ import requests
 import openai
 import json
 import os
+import logging
 from pathlib import Path
 from urllib import parse
 from enum import Enum
@@ -11,6 +12,7 @@ from typing import Any, Dict, List, Optional, Union, ClassVar
 from pydantic import BaseModel, root_validator
 from langchain.schema import Document
 
+logger = logging.getLogger(Path(__file__).stem)
 class SortCriterion(Enum):
 
     Relevance = "relevance"
@@ -22,6 +24,7 @@ class SortOrder(Enum):
 
     Ascending = "ascending"
     Descending = "descending"
+
 
 
 class ArxivAPIWrapper(BaseModel):
@@ -89,7 +92,7 @@ def arxiv_auto_search(sort_by:SortCriterion, sort_order:SortOrder,user_input:str
     :return: list of arxiv results 
     [
         {
-            "Tiltle":
+            "Title":
             "arxiv_id":
             "summary":
             "url":
@@ -115,10 +118,11 @@ def arxiv_auto_search(sort_by:SortCriterion, sort_order:SortOrder,user_input:str
     if len(arxiv_result) == 0:
         raise Exception("No arxiv result found")
 
-    print("get results:")
+    logger.info("get results:")
     for i,sub_dict in enumerate(arxiv_result):
         sub_dict["url"] = 'https://arxiv.org/pdf/' + sub_dict["arxiv_id"] + '.pdf'
-        print(f"{i+1}.{json.dumps(sub_dict)}")
+        logger.info(f"{i+1}.{json.dumps(sub_dict.get('Title'))}")
+        logger.debug(f"{i+1}.{json.dumps(sub_dict)}")
 
     return arxiv_result
 

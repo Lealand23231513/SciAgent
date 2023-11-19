@@ -2,6 +2,8 @@
 import openai
 import os
 import json
+import logging
+from pathlib import Path
 from dotenv import load_dotenv
 from langchain.chat_models import ChatOpenAI
 from langchain.prompts.chat import (
@@ -14,6 +16,8 @@ from langchain.schema import BaseOutputParser
 from langchain.output_parsers import StructuredOutputParser, ResponseSchema
 from search_and_download import *
 from summarizer import summarizer
+
+logger = logging.getLogger(Path(__file__).stem)
 
 # define output_parser
 class ModuleOutputParser(BaseOutputParser):
@@ -62,10 +66,11 @@ def task_decider(user_input:str):
     )
     
     response = chain.run(user_input)
-    print(response)
+    logger.info(response)
     return response
 
 def main(user_input:str, history):
+    global logger
     # import env variables
     load_dotenv()
     openai.api_key = os.getenv('OPENAI_API_KEY')
@@ -77,6 +82,16 @@ def main(user_input:str, history):
     exe_result = ""
     papers_info = []
     for task in response:
+        if task["name"] == "chatonly":
+            messages = history + [
+                {"role": "user", "content": f"{user_input}"}
+            ]
+            response = openai.ChatCompletion.create(
+                    model="gpt-3.5-turbo",
+                    temperature = 0,
+                    messages=messages
+                )
+            exe_result = response.choices[0].message["content"]
         if task["name"] == "search_and_download":
             if task["function"] == "arxiv_auto_search":
                 arxiv_results = arxiv_auto_search(task["todo"], history)
@@ -86,7 +101,7 @@ def main(user_input:str, history):
                 exe_result = reporter(arxiv_results)
         if task["name"] == "summarizer":
             summay_results = summarizer(papers_info)
-            print(summay_results)
+            logger.info(summay_results)
             exe_result = reporter(summay_results)
         yield exe_result
 
