@@ -5,12 +5,16 @@ from langchain.chains.summarize import load_summarize_chain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain.prompts import PromptTemplate
+from search_and_download import download_arxiv_pdf
 
 import os
 os.environ["OPENAI_API_KEY"] = ""
 
 template_1 = """Write a summary of this paper,
-which should contain introduction of research process and achievements, and the innovation or breakthrough in the research field:
+
+which should contain introduction of research motivation, innovation points, methods, and achievements. 
+
+It will be better if the summary can highlight the paper's meaning in its research field:
  
 {text}
  
@@ -46,7 +50,9 @@ def communicate(path:str, question:str):
     else:
         print("论文文件格式错误")
         os._exit(0)
+    print("The paper has been uploaded successfully.")
 
+    print("Please wait for a moment......")
     documents = loader.load()
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
     docs = text_splitter.split_documents(documents)
@@ -77,11 +83,15 @@ def communicate(path:str, question:str):
         memory=ConversationBufferWindowMemory(k=2),
     )
 
-    question = "Please introduce the research achievement of this paper."
-    input_key = "Summary:\n " + summary + "\n" + "Human's question:\n" + question
-    output = chatgpt_chain.predict(human_input=input_key)
+    while True:
+        question = input("What you want to ask to SciAgent? If you have nothing to ask, you can press 'n': ")
+        if question == 'n':
+            break
+        input_key = "Summary:\n " + summary + "\n" + "Human's question:\n" + question
+        output = chatgpt_chain.predict(human_input=input_key)
+        print(output)
 
-    return output
+    return 
 
 def summarizer(papers_info):
     ai_response = []
