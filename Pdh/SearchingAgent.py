@@ -6,8 +6,6 @@ from langchain.agents import AgentType
 from langchain.agents import tool
 from datetime import date
 
-os.environ["OPENAI_API_KEY"] = "your api key"
-os.environ["SERPAPI_API_KEY"] = "your api key"
 
 def SearchingAgent():
     text=input("请输入需要查询的内容")
@@ -38,4 +36,6 @@ def SearchingAgent():
     #agent.run(text)
 
 if __name__=='__main__':
-   SearchingAgent()
+    from dotenv import load_dotenv
+    load_dotenv()
+    SearchingAgent()
