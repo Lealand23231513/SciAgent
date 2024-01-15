@@ -1,4 +1,6 @@
+from typing_extensions import Unpack
 import arxiv
+from pydantic.config import ConfigDict
 import requests
 import openai
 import json
@@ -13,17 +15,18 @@ from pydantic import BaseModel, root_validator
 from langchain.schema import Document
 
 logger = logging.getLogger(Path(__file__).stem)
-class SortCriterion(Enum):
+from arxiv.arxiv import SortCriterion, SortOrder
+# class SortCriterion(Enum):
 
-    Relevance = "relevance"
-    LastUpdatedDate = "lastUpdatedDate"
-    SubmittedDate = "submittedDate"
+#     Relevance = "relevance"
+#     LastUpdatedDate = "lastUpdatedDate"
+#     SubmittedDate = "submittedDate"
 
 
-class SortOrder(Enum):
+# class SortOrder(Enum):
 
-    Ascending = "ascending"
-    Descending = "descending"
+#     Ascending = "ascending"
+#     Descending = "descending"
 
 
 
@@ -39,13 +42,15 @@ class ArxivAPIWrapper(BaseModel):
     load_max_docs: int = 100
     load_all_available_meta: bool = False
     doc_content_chars_max: Optional[int] = 40000
+    sort_by:SortCriterion = SortCriterion.Relevance
+    sort_order:SortOrder = SortOrder.Ascending
     
 
     def run(self, query:str,sort_by:SortCriterion, sort_order:SortOrder) -> list[dict[str, str]]:
 
         try:
             results = arxiv.Search(  
-                query[: self.ARXIV_MAX_QUERY_LENGTH], max_results=self.top_k_results, sort_by=sort_by, sort_order=sort_order
+                query[: self.ARXIV_MAX_QUERY_LENGTH], max_results=self.top_k_results, sort_by=self.sort_by, sort_order=self.sort_order
             ).results()
         except self.arxiv_exceptions as ex:
             print(f"Arxiv exception: {ex}")
@@ -87,7 +92,7 @@ def fn_args_generator(query:str, functions, history = []):
     else:
         raise Exception("Not receive function call")
 
-def arxiv_auto_search(sort_by:SortCriterion, sort_order:SortOrder,user_input:str, history = []) -> list[dict[str, str]]:
+def arxiv_auto_search(user_input:str, history = [], sort_by:SortCriterion = SortCriterion.Relevance, sort_order:SortOrder = SortOrder.Ascending) -> list[dict[str, str]]:
     """
     :return: list of arxiv results 
     [
@@ -103,7 +108,7 @@ def arxiv_auto_search(sort_by:SortCriterion, sort_order:SortOrder,user_input:str
 
     with open('modules.json', "r") as f:
         module_descriptions = json.load(f)
-    functions = module_descriptions[0]["functions"]
+    functions = module_descriptions[1]["functions"]
     function_args = fn_args_generator(user_input, functions, history)    
 
     top_k_results = function_args.get("top_k_results")
