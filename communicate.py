@@ -1,43 +1,37 @@
-from langchain import OpenAI, LLMChain, PromptTemplate
-from langchain.memory import ConversationBufferWindowMemory
-from langchain.llms import OpenAI
-from langchain.chains.summarize import load_summarize_chain
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.document_loaders import PyPDFLoader, Docx2txtLoader
+from langchain.text_splitter import CharacterTextSplitter
+from langchain.vectorstores import Chroma
 from langchain.prompts import PromptTemplate
+from langchain.document_loaders import PyPDFLoader, Docx2txtLoader
+from langchain.chains.question_answering import load_qa_chain
+from langchain.llms import OpenAI
+from search_and_download import download_arxiv_pdf
 
 import os
 os.environ["OPENAI_API_KEY"] = ""
 
-template_1 = """Write a summary of this paper,
-which should contain introduction of research process and achievements, and the innovation or breakthrough in the research field:
- 
-{text}
- 
-Summary Here:"""
+refine_prompt_template = (
+    "The original question is as follows: {question}\n"
+    "We have provided an existing answer: {existing_answer}\n"
+    "We have the opportunity to refine the existing answer"
+    "(only if needed) with some more context below.\n"
+    "------------\n"
+    "{context_str}\n"
+    "------------\n"
+    "Given the new context, refine the original answer to better "
+    "answer the question. Your answer should be concise, no more than 150 words will be best."
+    "If the context isn't useful, return the original answer."
+)
 
-template_2 = """Assistant is a large language model trained by OpenAI.
- 
-Assistant is designed to be able to assist with human refer to paper, from reading paper uploaded and answering questions about these papers to help human have a general idea of them. 
-    
-The task can be divided for two parts: Read the paper in parts, and answer the questions. Questions may be like: What is the research filed and interests of this paper? What is the achievement or finding in this paper? Or the significance of this research, etc.
+initial_qa_template = (
+    "Context information is below. \n"
+    "---------------------\n"
+    "{context_str}"
+    "\n---------------------\n"
+    "Given the context information and not prior knowledge, "
+    "answer the question: {question}\n Your answer should be concise, less than 150 words is best.\n"
+)
 
-Additionally, assistant is constantly learning and improving, and its capabilities are constantly evolving. It is able to process and understand a few of papers, and can do some simple comparison between these papers to meet human’s requests. 
-
-Overall, Assistant is a powerful tool for paper review. Assistant can improve the efficiency of researchers in accessing literature and obtaining reference information when conducting research.
-
-Now, assistant will get the summary of paper and the question raised by human, assistant should answer the question.  
-
-{history}
-
-The summary of the paper and human's question:
-{human_input}
-
-Assistant:
-
-"""
-
-def communicate(path:str, question:str):
+def communicate(path:str):
 
     if(path.split(".")[-1] == 'pdf'):
         loader = PyPDFLoader(path)
@@ -46,42 +40,37 @@ def communicate(path:str, question:str):
     else:
         print("论文文件格式错误")
         os._exit(0)
+    print("The paper has been uploaded successfully.")
 
+    print("Please wait for a moment......")
     documents = loader.load()
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
+    text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
     docs = text_splitter.split_documents(documents)
 
-    prompt_1 = PromptTemplate(
-        template=template_1, 
-        input_variables=["text"]
+    refine_prompt = PromptTemplate(
+        input_variables=["question", "existing_answer", "context_str"],
+        template=refine_prompt_template,
     )
 
-    chain = load_summarize_chain(
-        llm = OpenAI(temperature=0.2, max_tokens=1000, model="gpt-3.5-turbo-instruct"), 
-        chain_type="map_reduce", 
-        return_intermediate_steps=False, 
-        map_prompt=prompt_1, 
-        combine_prompt=prompt_1
+    initial_qa_prompt = PromptTemplate(
+        input_variables=["context_str", "question"], template=initial_qa_template
     )
-    summary = chain({"input_documents": docs}, return_only_outputs=True)["output_text"]
 
-    prompt_2 = PromptTemplate(
-        input_variables=["history", "human_input"], 
-        template=template_2
-    )
+    chain = load_qa_chain(llm=OpenAI(temperature=0.1, max_tokens=1000, model="gpt-3.5-turbo-instruct"), 
+                        chain_type="refine",
+                        question_prompt=initial_qa_prompt,
+                        refine_prompt=refine_prompt)
     
-    chatgpt_chain = LLMChain(
-        llm=OpenAI(temperature=0, model="gpt-3.5-turbo-instruct"), 
-        prompt=prompt_2, 
-        verbose=True, 
-        memory=ConversationBufferWindowMemory(k=2),
-    )
+    query = input("Ask question to SciAgent? (If nothing to ask, please press 'n' or 'N'):")
 
-    question = "Please introduce the research achievement of this paper."
-    input_key = "Summary:\n " + summary + "\n" + "Human's question:\n" + question
-    output = chatgpt_chain.predict(human_input=input_key)
+    while query != 'N' and query != 'n':
+        ans = chain({"input_documents": docs, "question": query}, return_only_outputs=True)
+        print(ans['output_text'])
+        query = input("What else do you want to ask? (If nothing to ask, please press 'n' or 'N'):")
+    
+    print("Thank you for using! Hoping these answers above are helpful to you.")
 
-    return output
+    return 
 
 def summarizer(papers_info):
     ai_response = []
