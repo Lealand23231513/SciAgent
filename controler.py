@@ -16,6 +16,7 @@ from langchain.schema import BaseOutputParser
 from langchain.output_parsers import StructuredOutputParser, ResponseSchema
 from search_and_download import *
 from summarizer import summarizer
+from communicate import communicator_auto_runner
 
 logger = logging.getLogger(Path(__file__).stem)
 
@@ -33,9 +34,7 @@ class ModuleOutputParser(BaseOutputParser):
     def parse(self, text: str) -> list:
         return json.loads(text)
 
-def task_decider(user_input:str):
-    with open('modules.json', "r") as f:
-        module_descriptions = json.load(f) 
+def task_decider(user_input:str, module_descriptions): 
     
     # define chat prompt
     system_template = "You are a helpful assistant that can choose which module to execute for the user's input.\
@@ -77,11 +76,15 @@ def main(user_input:str, history):
 
     user1_input = "I want to find some papers about LLM."
     user2_input = "I want to write a review about LLM, and I wonder what papers can I refer to? And please write me a summary about the papers."
+    
+    with open('modules.json', "r") as f:
+        module_descriptions = json.load(f)
 
-    response = task_decider(user_input)
+    response = task_decider(user_input, module_descriptions)
     exe_result = ""
     papers_info = []
     for task in response:
+        functions = next(filter(lambda item: item['name'] == task["name"] ,module_descriptions))['functions']
         if task["name"] == "chatonly":
             messages = history + [
                 {"role": "user", "content": f"{user_input}"}
@@ -94,15 +97,14 @@ def main(user_input:str, history):
             exe_result = response.choices[0].message["content"]
         if task["name"] == "search_and_download":
             if task["function"] == "arxiv_auto_search":
-                arxiv_results = arxiv_auto_search(task["todo"], history)
+                arxiv_results = arxiv_auto_search(task["todo"], functions, history)
                 for paper in arxiv_results:
                     paper["path"] = ""
                     papers_info.append(paper)
                 exe_result = reporter(arxiv_results)
-        if task["name"] == "summarizer":
-            summay_results = summarizer(papers_info)
-            logger.info(summay_results)
-            exe_result = reporter(summay_results)
+        if task["name"] == 'communicator':
+            communicate_result = communicator_auto_runner(task['todo'], functions, history)
+            exe_result = reporter(communicate_result)
         yield exe_result
 
 

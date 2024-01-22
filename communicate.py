@@ -5,9 +5,13 @@ from langchain.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain.chains.question_answering import load_qa_chain
 from langchain.llms import OpenAI
 from search_and_download import download_arxiv_pdf
-
+import logging
+from pathlib import Path
 import os
-os.environ["OPENAI_API_KEY"] = ""
+import json
+import openai
+from utils import fn_args_generator
+logger = logging.getLogger(Path(__file__).stem)
 
 refine_prompt_template = (
     "The original question is as follows: {question}\n"
@@ -30,23 +34,30 @@ initial_qa_template = (
     "Given the context information and not prior knowledge, "
     "answer the question: {question}\n Your answer should be concise, less than 150 words is best.\n"
 )
-
-def communicate(path:str):
-
+def retrieve_file(path:str):
     if(path.split(".")[-1] == 'pdf'):
         loader = PyPDFLoader(path)
     elif(path.split(".")[-1] == 'docx'):
         loader = Docx2txtLoader(path)
     else:
-        print("论文文件格式错误")
-        os._exit(0)
-    print("The paper has been uploaded successfully.")
-
-    print("Please wait for a moment......")
+        logger.error("WRONG EXTENSION: expect '.pdf' or '.docx', but receive '%s'." % path.split(".")[-1])
+        raise Exception("WRONG EXTENSION: expect '.pdf' or '.docx', but receive '%s'." % path.split(".")[-1])
+    
     documents = loader.load()
     text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
     docs = text_splitter.split_documents(documents)
+    logger.info(f"The paper ({path}) has been retrieved successfully.")
+    return docs
 
+
+
+def communicate(path:str, query:str) -> str:
+    '''
+    :param path: path or url of the paper
+    :param query: User's question about the paper  
+    '''
+    
+    docs = retrieve_file(path)
     refine_prompt = PromptTemplate(
         input_variables=["question", "existing_answer", "context_str"],
         template=refine_prompt_template,
@@ -60,31 +71,27 @@ def communicate(path:str):
                         chain_type="refine",
                         question_prompt=initial_qa_prompt,
                         refine_prompt=refine_prompt)
-    
-    query = input("Ask question to SciAgent? (If nothing to ask, please press 'n' or 'N'):")
+    ans = chain({"input_documents": docs, "question": query}, return_only_outputs=True)
+    logger.info(ans['output_text'])
+        
+    return ans['output_text']
 
-    while query != 'N' and query != 'n':
-        ans = chain({"input_documents": docs, "question": query}, return_only_outputs=True)
-        print(ans['output_text'])
-        query = input("What else do you want to ask? (If nothing to ask, please press 'n' or 'N'):")
-    
-    print("Thank you for using! Hoping these answers above are helpful to you.")
-
-    return 
-
-def summarizer(papers_info):
-    ai_response = []
-    for i,paper_info in enumerate(papers_info):
-        file_path = download_arxiv_pdf(paper_info)
-        papers_info[i]["path"] = file_path
-        #communicate_result = communicate(file_path, "question")
-        ai_response.append(f"Succesfully download <{paper_info['Title']}> into {file_path} !\n The summary result is as below:\n{summary_result}")
-    return "\n".join(ai_response)
+def communicator_auto_runner(user_input:str, functions, history = []) -> str:
+    openai.api_key = os.environ["OPENAI_API_KEY"]
+    function_args = fn_args_generator(user_input, functions, history)
+    logger.debug(f"funtion args:\n{function_args}")
+    path = function_args.get("path")
+    query = function_args.get("query")
+    result = communicate(path, query)
+    return result
     
 if __name__ == '__main__':
     from dotenv import load_dotenv
+    
     load_dotenv()
-    test_file = "TEST  Text Prototype Aligned Embedding to Activate LLM's Ability for Time Series.pdf"
-    #communicate_result = communicate(file_path, "question")
-    print(summary_result)
+    openai.api_key = os.getenv('OPENAI_API_KEY')
+    test_file = "C://Users//15135//Documents//DCDYY//PLLaMa.pdf"
+    test_url = "https://arxiv.org/pdf/1706.03762.pdf"
+    communicate_result = communicate(test_url, "what's the main idea of this article?")
+    # print(summary_result)
     #summary("C:\Pythonfiles\langchain_try\summary\\test_paper\Attention Is All You Need.pdf")

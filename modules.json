@@ -1,7 +1,8 @@
 [
     {
         "name":"chatonly",
-        "description": "Chat with the user. This module is available if and only if no other module is available."
+        "description": "Chat with the user. This module is available if and only if no other module is available.",
+        "functions":[]
     },
     {
         "name": "search_and_download",
@@ -30,43 +31,26 @@
         ]
     },
     {
-        "name": "summarizer",
-        "description": "Summarize the paper.",
-        "functions": [
-            {
-                "name": "summary",
-                "description": "Summarize the content of the paper(in PDF or Word format). The papers should be downloaded before summarized.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "The path of the paper to summarize."
-                        }
-                    },
-                    "required": [
-                        "path"
-                    ]
-                }
-            }
-        ]
-    },
-    {
-        "name": "communicate",
+        "name": "communicator",
+        "description" : "Retrieve the content of the paper(in PDF or Word format), and answer questions raised by user about this paper.",
         "functions": [
             {
                 "name": "communicate",
-                "description": "Summarize the content of the paper(in PDF or Word format), and answer questions raised by human about this paper.",
+                "description": "Retrieve the content of the paper(in PDF or Word format), and answer questions raised by user about this paper.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "path": {
                             "type": "string",
-                            "description": "The path of the paper to summarize."
+                            "description": "The path or url of the paper."
+                        },
+                        "query": {
+                            "type": "string",
+                            "description": "The user's question about the paper."
                         }
                     },
                     "required": [
-                        "path"
+                        "path","query"
                     ]
                 }
             }
@@ -74,6 +58,7 @@
     },
     {
         "name": "relevant research",
+        "description":"Generate relevant field research situation.",
         "functions": [
             {
                 "name": "related_work",
