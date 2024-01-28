@@ -24,6 +24,7 @@ refine_prompt_template = (
     "Given the new context, refine the original answer to better "
     "answer the question. Your answer should be concise, no more than 150 words will be best."
     "If the context isn't useful, return the original answer."
+    "If you don't know the answer, response that you don't know."
 )
 
 initial_qa_template = (
@@ -33,6 +34,7 @@ initial_qa_template = (
     "\n---------------------\n"
     "Given the context information and not prior knowledge, "
     "answer the question: {question}\n Your answer should be concise, less than 150 words is best.\n"
+    "If you don't know the answer, response that you don't know."
 )
 def retrieve_file(path:str):
     if(path.split(".")[-1] == 'pdf'):
@@ -90,8 +92,7 @@ if __name__ == '__main__':
     
     load_dotenv()
     openai.api_key = os.getenv('OPENAI_API_KEY')
-    test_file = "C://Users//15135//Documents//DCDYY//PLLaMa.pdf"
+    test_file = "C:/Users/15135/Documents/DCDYY/SciAgent/.cache/RepQ-ViT(1).pdf"
     test_url = "https://arxiv.org/pdf/1706.03762.pdf"
-    communicate_result = communicate(test_url, "what's the main idea of this article?")
-    # print(summary_result)
-    #summary("C:\Pythonfiles\langchain_try\summary\\test_paper\Attention Is All You Need.pdf")
+    communicate_result = communicate(test_file, "What is CLaMP?")
+    print(communicate_result)
