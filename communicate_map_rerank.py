@@ -15,18 +15,18 @@ from utils import fn_args_generator
 logger = logging.getLogger(Path(__file__).stem)
 
 output_parser = RegexParser(
-    regex=r"(.*?)\nScore: (\d*)",
+    regex=r"answer: (.*?)\nscore: (\d*)",
     output_keys=["answer", "score"],
     default_output_key="answer"
 )
 
-prompt_template = """Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.
- 
+prompt_template = """Use the following pieces of context to answer the question at the end. If you don't know the answer, response like you don't know the answer, don't try to make up an answer.
+The answer should be concise and no more than 100 words.
 In addition to giving an answer, also return a score of how fully it answered the user's question. This should be in the following format:
  
-Question: [question here]
-Helpful Answer In Italian: [answer here]
-Score: [score between 0 and 100]
+question: [question here]
+answer: [answer here]
+score: [score between 0 and 100]
  
 Begin!
  
@@ -34,8 +34,8 @@ Context:
 ---------
 {context}
 ---------
-Question: {question}
-Concise Answer no more than 100 words here:"""
+question: {question}
+"""
 
 def retrieve_file(path:str):
     if(path.split(".")[-1] == 'pdf'):
@@ -90,8 +90,9 @@ if __name__ == '__main__':
     
     load_dotenv()
     openai.api_key = os.getenv('OPENAI_API_KEY')
-    test_file = "C://Users//15135//Documents//DCDYY//PLLaMa.pdf"
+    test_file = r"C:\Users\15135\Documents\DCDYY\SciAgent\.cache\CLaMP(1).pdf"
     test_url = "https://arxiv.org/pdf/1706.03762.pdf"
-    communicate_result = communicate(test_url, "what's the main idea of this article?")
-    # print(summary_result)
+    question = "What are the two components with extreme distributions that RepQ-ViT focuses on?"
+    communicate_result = communicate(test_file, question)
+    print("paper: {}\nquestion: {}\nanswer: {}".format(test_file.split('\\')[-1],question,communicate_result))
     #summary("C:\Pythonfiles\langchain_try\summary\\test_paper\Attention Is All You Need.pdf")
