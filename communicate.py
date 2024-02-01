@@ -65,7 +65,7 @@ def communicate(path:str, query:str) -> str:
     logger.info("keywords: {}".format(', '.join(keywords)))
     regex = '|'.join(keywords)
     docs = [doc for doc in docs if re.search(regex, doc.page_content)]
-    if len(docs)==0:
+    if len(docs)==0:# not related query
         return "I can't find the answer because the question is not related to the provided papers."
     refine_prompt = PromptTemplate(
         input_variables=["question", "existing_answer", "context_str"],
