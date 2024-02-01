@@ -15,8 +15,9 @@ from utils import fn_args_generator
 logger = logging.getLogger(Path(__file__).stem)
 
 output_parser = RegexParser(
-    regex=r"(.*?)\nScore: (.*)",
+    regex=r"(.*?)\nScore: (\d*)",
     output_keys=["answer", "score"],
+    default_output_key="answer"
 )
 
 prompt_template = """Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.
