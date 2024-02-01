@@ -11,7 +11,8 @@ from pathlib import Path
 import os
 import json
 import openai
-from utils import fn_args_generator
+import re
+from utils import fn_args_generator, auto_extractor
 logger = logging.getLogger(Path(__file__).stem)
 
 output_parser = RegexParser(
@@ -61,7 +62,12 @@ def communicate(path:str, query:str) -> str:
     '''
     
     docs = retrieve_file(path)
-    
+    keywords = auto_extractor(query)
+    logger.info("keywords: {}".format(', '.join(keywords)))
+    regex = '|'.join(keywords)
+    docs = [doc for doc in docs if re.search(regex, doc.page_content)]
+    if len(docs)==0:
+        return "I can't find the answer because the question is not related to the provided papers."
     prompt = PromptTemplate(
         template=prompt_template,
         input_variables=["context", "question"],

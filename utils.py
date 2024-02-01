@@ -1,5 +1,6 @@
 import openai
 import json
+import os
 def fn_args_generator(query:str, functions, history = []):
     messages = history + [{"role": "user", "content": f"{query}"}]
     response = openai.ChatCompletion.create(
@@ -25,3 +26,27 @@ def translator(src:str):
         temperature=0,
     )
     return response.choices[0].message["content"]
+
+def auto_extractor(query, history = []):
+    prompt = """
+Extract keywords from the query:
+[query]: {}
+The output should be formated as below:
+keyword1,keyword2,...
+""".format(query)
+    messages = history + [{"role": "user", "content": prompt}]
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        temperature = 0,
+        messages=messages  
+    )
+    keywords = response["choices"][0].message["content"].split(',')
+    keywords = [keyword.strip() for keyword in keywords]
+    return keywords
+
+if __name__ == '__main__':
+    from dotenv import load_dotenv
+    
+    load_dotenv()
+    openai.api_key = os.getenv('OPENAI_API_KEY')
+    print(auto_extractor("What are the two components with extreme distributions that RepQ-ViT focuses on?"))

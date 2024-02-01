@@ -9,8 +9,9 @@ import logging
 from pathlib import Path
 import os
 import json
+import re
 import openai
-from utils import fn_args_generator
+from utils import fn_args_generator, auto_extractor
 logger = logging.getLogger(Path(__file__).stem)
 
 refine_prompt_template = (
@@ -60,6 +61,12 @@ def communicate(path:str, query:str) -> str:
     '''
     
     docs = retrieve_file(path)
+    keywords = auto_extractor(query)
+    logger.info("keywords: {}".format(', '.join(keywords)))
+    regex = '|'.join(keywords)
+    docs = [doc for doc in docs if re.search(regex, doc.page_content)]
+    if len(docs)==0:
+        return "I can't find the answer because the question is not related to the provided papers."
     refine_prompt = PromptTemplate(
         input_variables=["question", "existing_answer", "context_str"],
         template=refine_prompt_template,
@@ -94,5 +101,5 @@ if __name__ == '__main__':
     openai.api_key = os.getenv('OPENAI_API_KEY')
     test_file = "C:/Users/15135/Documents/DCDYY/SciAgent/.cache/RepQ-ViT(1).pdf"
     test_url = "https://arxiv.org/pdf/1706.03762.pdf"
-    communicate_result = communicate(test_file, "What is CLaMP?")
+    communicate_result = communicate(test_file, "What are the two components with extreme distributions that RepQ-ViT focuses on?")
     print(communicate_result)
