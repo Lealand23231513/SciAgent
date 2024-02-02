@@ -92,7 +92,7 @@ def arxiv_auto_search(user_input:str, functions, history = [], sort_by:SortCrite
     return arxiv_result
 
 def download_arxiv_pdf(paper_info, folder_name = Path("./.cache"), replace_exist = False):
-    trans_file_name = parse.quote(paper_info["Title"]) + '.pdf'
+    trans_file_name = parse.quote(paper_info["Title"], safe='') + '.pdf'
     file_path = os.path.abspath(os.path.join(folder_name,  trans_file_name))
     pdf_url = paper_info["url"]
     response = requests.get(pdf_url)
