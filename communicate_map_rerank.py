@@ -5,6 +5,8 @@ from langchain.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain.chains.question_answering import load_qa_chain
 from langchain.llms import OpenAI
 from langchain.output_parsers import RegexParser
+from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.chains import RetrievalQA
 from search_and_download import download_arxiv_pdf
 import logging
 from pathlib import Path
@@ -14,6 +16,7 @@ import openai
 import re
 from utils import fn_args_generator, auto_extractor
 logger = logging.getLogger(Path(__file__).stem)
+embeddings = OpenAIEmbeddings()
 
 output_parser = RegexParser(
     regex=r"answer: (.*?)\nscore: (\d*)",
@@ -64,23 +67,30 @@ def communicate(path:str, query:str) -> str:
     docs = retrieve_file(path)
     keywords = auto_extractor(query)
     logger.info("keywords: {}".format(', '.join(keywords)))
-    regex = '|'.join(keywords)
-    docs = [doc for doc in docs if re.search(regex, doc.page_content)]
+    #regex = '|'.join(keywords)
+    #docs = [doc for doc in docs if re.search(regex, doc.page_content)]
     if len(docs)==0:# not related query
         return "I can't find the answer because the question is not related to the provided papers."
+    vec_store = Chroma.from_documents(docs, embeddings)
     prompt = PromptTemplate(
         template=prompt_template,
         input_variables=["context", "question"],
         output_parser=output_parser,
     )
 
-    chain = load_qa_chain(llm=OpenAI(temperature=0.1, max_tokens=1000, model="gpt-3.5-turbo-instruct"), 
-                        chain_type="map_rerank",
-                        prompt=prompt)
-    ans = chain({"input_documents": docs, "question": query}, return_only_outputs=True)
-    logger.info(ans['output_text'])
+    #chain = load_qa_chain(llm=OpenAI(temperature=0.1, max_tokens=1000, model="gpt-3.5-turbo-instruct"), 
+    #                    chain_type="map_rerank",
+    #                    prompt=prompt)
+
+    chain_kwargs = {"prompt": prompt}
+    qa_chain = RetrievalQA.from_chain_type(llm=OpenAI(), chain_type="refine",
+                                     retriever=vec_store.as_retriever(),
+                                     chain_type_kwargs=chain_kwargs)
+    #ans = chain({"input_documents": docs, "question": query}, return_only_outputs=True)
+    ans = qa_chain.run(query)
+    logger.info(ans)
         
-    return ans['output_text']
+    return ans
 
 def communicator_auto_runner(user_input:str, functions, history = []) -> str:
     openai.api_key = os.environ["OPENAI_API_KEY"]
@@ -96,9 +106,10 @@ if __name__ == '__main__':
     
     load_dotenv()
     openai.api_key = os.getenv('OPENAI_API_KEY')
-    test_file = r"C:\Users\15135\Documents\DCDYY\SciAgent\.cache\CLaMP(1).pdf"
+    #test_file = r"C:\Users\15135\Documents\DCDYY\SciAgent\.cache\CLaMP(1).pdf"
+    test_file = r"C:\Pythonfiles\langchain_try\paper\CLaMP.pdf"
     test_url = "https://arxiv.org/pdf/1706.03762.pdf"
-    question = "What are the two components with extreme distributions that RepQ-ViT focuses on?"
+    question = "What is RepQ-ViT?"
     communicate_result = communicate(test_file, question)
     print("paper: {}\nquestion: {}\nanswer: {}".format(test_file.split('\\')[-1],question,communicate_result))
     #summary("C:\Pythonfiles\langchain_try\summary\\test_paper\Attention Is All You Need.pdf")
