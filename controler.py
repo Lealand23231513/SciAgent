@@ -1,11 +1,12 @@
 # 核心控制模块
 import openai
+from openai import OpenAI
 import os
 import json
 import logging
 from pathlib import Path
 from dotenv import load_dotenv
-from langchain.chat_models import ChatOpenAI
+from langchain_community.chat_models import ChatOpenAI
 from langchain.prompts.chat import (
     ChatPromptTemplate,
     SystemMessagePromptTemplate,
@@ -13,9 +14,7 @@ from langchain.prompts.chat import (
 )
 from langchain.chains import LLMChain
 from langchain.schema import BaseOutputParser
-from langchain.output_parsers import StructuredOutputParser, ResponseSchema
 from search_and_download import *
-from summarizer import summarizer
 from communicate import communicator_auto_runner
 
 logger = logging.getLogger(Path(__file__).stem)
@@ -86,15 +85,16 @@ def main(user_input:str, history):
     for task in response:
         functions = next(filter(lambda item: item['name'] == task["name"] ,module_descriptions))['functions']
         if task["name"] == "chatonly":
+            client = OpenAI()
             messages = history + [
                 {"role": "user", "content": f"{user_input}"}
             ]
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                     model="gpt-3.5-turbo",
                     temperature = 0,
                     messages=messages
                 )
-            exe_result = response.choices[0].message["content"]
+            exe_result = response.choices[0].message.content
         if task["name"] == "search_and_download":
             if task["function"] == "arxiv_auto_search":
                 arxiv_results = arxiv_auto_search(task["todo"], functions, history)
@@ -105,36 +105,41 @@ def main(user_input:str, history):
         if task["name"] == 'communicator':
             communicate_result = communicator_auto_runner(task['todo'], functions, history)
             exe_result = reporter(communicate_result)
-        yield exe_result
+        if exe_result:
+            yield exe_result
+        else:
+            raise Exception('exe_result is None.')
 
 
 def judger(history, question):
+    client = OpenAI()
     messages = history + [
         {"role": "user", "content": f"Make a \"True\" or \"False\" decision about this question based on historical information:{question}\n Answer the question simply by \"True\" or \"False\""}
     ]
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             temperature = 0,
             messages=messages
         )
-    if response.choices[0].message["content"] not in ("True", "False"):
+    if response.choices[0].message.content not in ("True", "False"):
         raise Exception("judger: response not in (\"True\", \"False\")")
-    return response.choices[0].message["content"]
+    return response.choices[0].message.content
     
 def reporter(exe_result):
     '''
     Report execution result of this step to the user.
     '''
+    client = OpenAI()
     messages = [
                 {"role": "system", "content": "Report the full execution result to the user."},
                 {"role": "assistant", "content": f"{exe_result}"}
             ]
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             temperature = 0,
-            messages=messages
+            messages=messages# type: ignore
         )
-    return response.choices[0].message["content"]
+    return response.choices[0].message.content
 
 
 
@@ -150,3 +155,6 @@ def main_for_test(user_input:str):
     yield "test"
 
     #TODO: Contact controler to other modules.
+if __name__ == '__main__':
+    for chunk in main_for_test('TEST'):
+        print(chunk)

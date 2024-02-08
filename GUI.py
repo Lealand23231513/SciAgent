@@ -54,9 +54,9 @@ with gr.Blocks(title='SciAgent') as demo:  # 设置页面标题为'SciAgent'
                 fn = lambda : gr.Textbox(label="你的信息:", interactive=True, placeholder="请在这里输入"), inputs = None, outputs = [user_input], queue = False
             )
         
-        with gr.Tab('文件传输'):
-            uploaded_file = gr.File(label="上传PDF文件", type="file")  # 允许上传PDF文件
-            ai_response_file = gr.Textbox(label="SciAgent:",placeholder="SciAgent 将会给出概括", value='')
+        # with gr.Tab('文件传输'):
+        #     uploaded_file = gr.File(label="上传PDF文件", type="file")  # 允许上传PDF文件
+        #     ai_response_file = gr.Textbox(label="SciAgent:",placeholder="SciAgent 将会给出概括", value='')
 
 
 # 启动Gradio界面
