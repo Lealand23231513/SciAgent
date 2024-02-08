@@ -5,6 +5,7 @@ from pathlib import Path
 
 
 
+
 def add_input(user_input, chatbot):
     chatbot.append((user_input,""))
     return gr.Textbox(interactive = False, value = '', placeholder = ''), chatbot
@@ -61,6 +62,7 @@ with gr.Blocks(title='SciAgent') as demo:  # 设置页面标题为'SciAgent'
 
 # 启动Gradio界面
 if __name__ == '__main__':
+    print(gr.__version__)
     logging.basicConfig(level = logging.INFO,format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(Path(__file__).stem)
     logger.info('SciAgent start!')
