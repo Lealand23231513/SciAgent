@@ -2,6 +2,7 @@ import gradio as gr
 import logging
 from controler import main_for_test,main
 from pathlib import Path
+from dotenv import load_dotenv
 
 
 
@@ -63,6 +64,7 @@ with gr.Blocks(title='SciAgent') as demo:  # 设置页面标题为'SciAgent'
 # 启动Gradio界面
 if __name__ == '__main__':
     print(gr.__version__)
+    load_dotenv()
     logging.basicConfig(level = logging.INFO,format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(Path(__file__).stem)
     logger.info('SciAgent start!')

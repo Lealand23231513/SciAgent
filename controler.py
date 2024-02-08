@@ -72,7 +72,6 @@ def main(user_input:str, history):
     # import env variables
     load_dotenv()
     openai.api_key = os.getenv('OPENAI_API_KEY')
-
     user1_input = "I want to find some papers about LLM."
     user2_input = "I want to write a review about LLM, and I wonder what papers can I refer to? And please write me a summary about the papers."
     
