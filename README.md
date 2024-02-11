@@ -7,3 +7,9 @@
 # TODO
 1. 完善GUI，目前不能复制粘贴
 2. 优化communicate
+# Use
+```bash
+git clone https://github.com/Lealand23231513/SciAgent.git
+cd SciAgent
+pip install -r requirements.txt
+```
