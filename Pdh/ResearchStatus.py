@@ -1,8 +1,8 @@
 ##用jupyter notebook写的 先直接放上来了（（
-pip install langchain
-pip install arxiv
-pip install pymupdf
-pip install openai
+# pip install langchain
+# pip install arxiv
+# pip install pymupdf
+# pip install openai
 import os
 os.environ["OPENAI_API_KEY"] = 
 from langchain.llms import OpenAI
