@@ -1,10 +1,11 @@
 from langchain.text_splitter import CharacterTextSplitter
-from langchain.vectorstores import Chroma
+from langchain_community.vectorstores import Chroma
+from langchain.chains import RefineDocumentsChain, LLMChain
 from langchain.prompts import PromptTemplate
-from langchain.document_loaders import PyPDFLoader, Docx2txtLoader
+from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain.chains.question_answering import load_qa_chain
-from langchain.llms import OpenAI
-from search_and_download import download_arxiv_pdf
+from langchain_openai import OpenAI
+# from search_and_download import download_arxiv_pdf
 import logging
 from pathlib import Path
 import os
@@ -25,7 +26,7 @@ refine_prompt_template = (
     "Given the new context, refine the original answer to better "
     "answer the question. Your answer should be concise, no more than 150 words will be best."
     "If the context isn't useful, return the original answer."
-    "If you don't know the answer, response that you don't know."
+    "If you can't find answer from the context, you should explain the situation and answer the question based on your own knowledge."
 )
 
 initial_qa_template = (
@@ -35,9 +36,9 @@ initial_qa_template = (
     "\n---------------------\n"
     "Given the context information and not prior knowledge, "
     "answer the question: {question}\n Your answer should be concise, less than 150 words is best.\n"
-    "If you don't know the answer, response that you don't know."
+    "If you can't find answer from the context, you should explain the situation and answer the question based on your own knowledge."
 )
-def retrieve_file(path:str):
+def retrieve_file(path):
     if(path.split(".")[-1] == 'pdf'):
         loader = PyPDFLoader(path)
     elif(path.split(".")[-1] == 'docx'):
@@ -54,19 +55,19 @@ def retrieve_file(path:str):
 
 
 
-def communicate(path:str, query:str) -> str:
+def communicate(path, query:str) -> str:
     '''
     :param path: path or url of the paper
     :param query: User's question about the paper  
     '''
     
     docs = retrieve_file(path)
-    keywords = auto_extractor(query)
-    logger.info("keywords: {}".format(', '.join(keywords)))
-    regex = '|'.join(keywords)
-    docs = [doc for doc in docs if re.search(regex, doc.page_content)]
-    if len(docs)==0:# not related query
-        return "I can't find the answer because the question is not related to the provided papers."
+    # keywords = auto_extractor(query)
+    # logger.info("keywords: {}".format(', '.join(keywords)))
+    # regex = '|'.join(keywords)
+    # docs = [doc for doc in docs if re.search(regex, doc.page_content)]
+    # if len(docs)==0:# not related query
+    #     return "I can't find the answer because the question is not related to the provided papers."
     refine_prompt = PromptTemplate(
         input_variables=["question", "existing_answer", "context_str"],
         template=refine_prompt_template,
@@ -80,7 +81,7 @@ def communicate(path:str, query:str) -> str:
                         chain_type="refine",
                         question_prompt=initial_qa_prompt,
                         refine_prompt=refine_prompt)
-    ans = chain({"input_documents": docs, "question": query}, return_only_outputs=True)
+    ans = chain.invoke({"input_documents": docs, "question": query}, return_only_outputs=True)
     logger.info(ans['output_text'])
         
     return ans['output_text']
@@ -99,7 +100,7 @@ if __name__ == '__main__':
     
     load_dotenv()
     openai.api_key = os.getenv('OPENAI_API_KEY')
-    test_file = "C:/Users/15135/Documents/DCDYY/SciAgent/.cache/RepQ-ViT(1).pdf"
+    test_file = r".cache\ClaMP.pdf"
     test_url = "https://arxiv.org/pdf/1706.03762.pdf"
     communicate_result = communicate(test_file, "What are the two components with extreme distributions that RepQ-ViT focuses on?")
     print(communicate_result)

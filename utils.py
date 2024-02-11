@@ -1,33 +1,135 @@
-import openai
+from langchain_openai import ChatOpenAI
+from openai import OpenAI
 import json
 import os
-def fn_args_generator(query:str, functions, history = []):
+from langchain_core.prompts.chat import _convert_to_message
+from langchain_community.adapters.openai import convert_dict_to_message, convert_message_to_dict
+from langchain.prompts.chat import (
+    ChatPromptTemplate,
+    SystemMessagePromptTemplate,
+    HumanMessagePromptTemplate,
+)
+from langchain.schema import BaseOutputParser
+from langchain.chains import LLMChain
+import logging
+from pathlib import Path
+
+
+logger = logging.getLogger(Path(__file__).stem)
+
+def chater(query:str, history, stream=False, api_key:str|None=None):
     messages = history + [{"role": "user", "content": f"{query}"}]
-    response = openai.ChatCompletion.create(
+    messages = [convert_dict_to_message(m) for m in messages]
+    llm = ChatOpenAI(model='gpt-3.5-turbo-0125',streaming=stream, api_key=api_key)
+    for chunk in llm.stream(messages):
+        yield chunk.content
+
+# define output_parser
+class ModuleOutputParser(BaseOutputParser):
+    def get_format_instructions(self) -> str:
+        output_format = [
+                            {
+                                "name" : 'module\'s name',
+                                "function" : 'module\'s function name',
+                                "todo": 'Assuming you are the user, write a query telling the model what you want to do with this function'
+                            }
+                        ]
+        return json.dumps(output_format)
+    def parse(self, text: str) -> list:
+        return json.loads(text)
+
+def task_decider(user_input:str, module_descriptions): 
+    
+    # define chat prompt
+    system_template = "You are a helpful assistant that can choose which module to execute for the user's input.\
+        The modules' information and function is in json format as below:\n{module_descriptions}."
+    system_message_prompt = SystemMessagePromptTemplate.from_template(system_template)
+    human_template = "You should generate the modules' name, function to execute and the function's target based on the user's input.\
+        The user's input is as below:\n{text}\n \
+        The output should be formatted as json. The format requirement is as below:\n{output_format}\n\
+        Attention: The numer of the modules can be more than 1."
+    human_message_prompt = HumanMessagePromptTemplate.from_template(human_template)
+
+    # define output parser
+    output_parser = ModuleOutputParser()
+
+    chat_prompt =  ChatPromptTemplate(
+        messages=[system_message_prompt, human_message_prompt],
+        input_variables=["text"],
+        partial_variables={
+            "module_descriptions": str(module_descriptions),
+            "output_format": output_parser.get_format_instructions()
+            }
+    )
+
+    chain = LLMChain(
+        llm=ChatOpenAI(temperature=0),
+        prompt=chat_prompt,
+        output_parser=output_parser
+    )
+    
+    response = chain.run(user_input)
+    logger.info(response)
+    return response
+
+
+def reporter(exe_result, stream=False, api_key:str|None=None):
+    '''
+    Report execution result of this step to the user.
+    '''
+    messages = [
+                {"role": "system", "content": "Report the full execution result to the user."},
+                {"role": "assistant", "content": f"{exe_result}"}
+            ]
+    messages = [convert_dict_to_message(m) for m in messages]
+    llm = ChatOpenAI(model='gpt-3.5-turbo-0125',streaming=stream, api_key=api_key)
+    for chunk in llm.stream(messages):
+        yield chunk.content
+
+def judger(history, question):
+    client = OpenAI()
+    messages = history + [
+        {"role": "user", "content": f"Make a \"True\" or \"False\" decision about this question based on historical information:{question}\n Answer the question simply by \"True\" or \"False\""}
+    ]
+    response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            temperature = 0,
+            messages=messages
+        )
+    if response.choices[0].message.content not in ("True", "False"):
+        raise Exception("judger: response not in (\"True\", \"False\")")
+    return response.choices[0].message.content
+
+def fn_args_generator(query:str, functions, history = []):
+    client = OpenAI()
+    messages = history + [{"role": "user", "content": f"{query}"}]
+    response = client.chat.completions.create(
         model="gpt-3.5-turbo-0613",
         temperature = 0,
         messages=messages,
         functions=functions,
         function_call="auto",  
     )
-    response_message = response["choices"][0]["message"]
-    if response_message.get("function_call"):
-        function_args = json.loads(response_message["function_call"]["arguments"])
-        return function_args
+    response_message = response.choices[0].message
+    if response_message.function_call:
+        function_args = json.loads(response_message.function_call.arguments)
+        return function_args  
     else:
         raise Exception("Not receive function call")
     
 def translator(src:str):
+    client = OpenAI()
     prompt = f"Please translate this sentence into English: {src}"
     messages = [{"role": "user", "content": prompt}] 
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-3.5-turbo",
-        messages=messages,
+        messages=messages, # type: ignore
         temperature=0,
     )
-    return response.choices[0].message["content"]
+    return response.choices[0].message.content
 
 def auto_extractor(query, history = []):
+    client = OpenAI()
     prompt = """
 Extract keywords from the query:
 [query]: {}
@@ -35,18 +137,22 @@ The output should be formated as below:
 keyword1,keyword2,...
 """.format(query)
     messages = history + [{"role": "user", "content": prompt}]
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         temperature = 0,
         messages=messages  
     )
-    keywords = response["choices"][0].message["content"].split(',')
-    keywords = [keyword.strip() for keyword in keywords]
+    keywords = response.choices[0].message.content
+    if keywords:
+        keywords = keywords.split(',')
+        keywords = [keyword.strip() for keyword in keywords]
+    else:
+        raise Exception('response.choices[0].message.content is None')
     return keywords
 
 if __name__ == '__main__':
     from dotenv import load_dotenv
-    
+    import openai
     load_dotenv()
     openai.api_key = os.getenv('OPENAI_API_KEY')
     print(auto_extractor("What are the two components with extreme distributions that RepQ-ViT focuses on?"))

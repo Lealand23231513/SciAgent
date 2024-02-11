@@ -84,12 +84,12 @@ def arxiv_auto_search_and_download(query:str, download:bool = True, top_k_result
 
     prompt = f"""请你将该单词翻译成英文，并且只返回翻译后的英文单词：{query}"""
     messages = [{"role": "user", "content": prompt}] 
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=messages,
         temperature=0,
     )
-    query = response.choices[0].message["content"]
+    query = response.choices[0].message.content
 
     arxiv_wrapper = ArxivAPIWrapper(top_k_results=top_k_results)
     arxiv_result = arxiv_wrapper.run(f"""{query}""")
@@ -137,7 +137,7 @@ def search_and_download(user_input:str):
     with open('modules.json', "r") as f:
         module_descriptions = json.load(f)
     functions = module_descriptions[0]["functions"]
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-3.5-turbo-0613",
         temperature = 0,
         messages=messages,
