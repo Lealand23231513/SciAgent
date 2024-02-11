@@ -1,3 +1,4 @@
+from sys import version
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain_community.vectorstores import Chroma
@@ -51,7 +52,7 @@ def retrieve_file(path:str, chunk_size=1000, chunk_overlap=200, add_start_index=
 
 
 
-def communicate(path:str, query:str) -> str:
+def retrieval(path:str, query:str, stream=False) -> str:
     '''
     :param path: path or url of the paper
     :param query: User's question about the paper  
@@ -78,13 +79,13 @@ def communicate(path:str, query:str) -> str:
         
     return ans['result']
 
-def communicator_auto_runner(user_input:str, functions, history = []) -> str:
-    openai.api_key = os.environ["OPENAI_API_KEY"]
+
+def retrieval_auto_runner(user_input:str, functions, history = [], stream=False) -> str:
     function_args = fn_args_generator(user_input, functions, history)
     logger.debug(f"funtion args:\n{function_args}")
     path = function_args.get("path")
     query = function_args.get("query")
-    result = communicate(path, query)
+    result = retrieval(path, query)
     return result
     
 if __name__ == '__main__':
@@ -95,5 +96,5 @@ if __name__ == '__main__':
     test_file = r"C:\Users\15135\Documents\DCDYY\SciAgent\.cache\CLaMP.pdf"
     test_url = "https://arxiv.org/pdf/1706.03762.pdf"
     question = "What is RepQ-ViT?"
-    communicate_result = communicate(test_file, question)
+    communicate_result = retrieval(test_file, question)
     print("paper: {}\nquestion: {}\nanswer: {}".format(Path(test_file),question,communicate_result))
