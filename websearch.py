@@ -81,7 +81,7 @@ def arxiv_auto_search(user_input:str, functions, history = [], sort_by:SortCrite
     arxiv_result = arxiv_wrapper.run(f"""{query}""",sort_by,sort_order)
     
     if len(arxiv_result) == 0:
-        raise Exception("No arxiv result found")
+        raise ValueError("No arxiv result found")
 
     logger.info("get results:")
     for i,sub_dict in enumerate(arxiv_result):

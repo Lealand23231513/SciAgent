@@ -5,7 +5,7 @@
         "functions":[]
     },
     {
-        "name": "search_and_download",
+        "name": "websearch",
         "description": "Search papers. Download apis are also included in this module.",
         "functions": [
             {
@@ -31,22 +31,18 @@
         ]
     },
     {
-        "name": "communicator",
-        "description" : "Retrieve the content of the paper(in PDF or Word format), and answer questions raised by user about this paper.",
+        "name": "retrieve",
+        "description" : "Retrieve the content of the cached papers and response to the user's query.",
         "functions": [
             {
-                "name": "communicate",
-                "description": "Retrieve the content of the paper(in PDF or Word format), and answer questions raised by user about this paper.",
+                "name": "Retrieval",
+                "description": "Retrieve the content of the cached papers and response to the user's query.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "The path or url of the paper."
-                        },
                         "query": {
                             "type": "string",
-                            "description": "The user's question about the paper."
+                            "description": "The user's question about the papers."
                         }
                     },
                     "required": [

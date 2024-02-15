@@ -132,7 +132,7 @@ def arxiv_auto_search_and_download(query:str, download:bool = True, top_k_result
 
     return arxiv_result
 
-def search_and_download(user_input:str):
+def websearch(user_input:str):
     messages = [{"role": "user", "content": f"{user_input}"}]
     with open('modules.json', "r") as f:
         module_descriptions = json.load(f)

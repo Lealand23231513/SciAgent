@@ -5,8 +5,9 @@ import json
 import logging
 from pathlib import Path
 from dotenv import load_dotenv
+from Retrieval_qa import retrieval_auto_runner
 from utils import *
-from search_and_download import *
+from websearch import *
 from communicate import communicator_auto_runner
 
 logger = logging.getLogger(Path(__file__).stem)
@@ -29,20 +30,21 @@ def main(user_input:str, history, tools:list, stream:bool = False):
         if task["name"] == "chatonly":
             yield from chater(user_input, history, stream=stream)
             continue
-        if task["name"] == "search_and_download":
+        if task["name"] == "websearch":
             if task["function"] == "arxiv_auto_search":
-                arxiv_results = arxiv_auto_search(task["todo"], functions, history)
-                for paper in arxiv_results:
-                    paper["path"] = ""
-                    papers_info.append(paper)
-                exe_result = reporter(arxiv_results)
-        if task["name"] == 'communicator':
-            communicate_result = communicator_auto_runner(task['todo'], functions, history)
-            exe_result = reporter(communicate_result)
-        if exe_result:
-            yield from exe_result
-        else:
-            raise Exception('exe_result is None.')
+                try:
+                    arxiv_results = arxiv_auto_search(task["todo"], functions, history)
+                    for paper in arxiv_results:
+                        paper["path"] = ""
+                        papers_info.append(paper)
+                    exe_result = result_parser(arxiv_results, task["name"], query=user_input, stream=stream)
+                except ValueError as e:
+                    err_msg = e.args[0]
+                    exe_result = result_parser(err_msg, 'exception', query=user_input, stream=stream)
+        if task["name"] == 'retrieve':
+            retrieval_result = retrieval_auto_runner(task['todo']+f"\nuser's query:\n{user_input}", functions, history)
+            exe_result = retrieval_result
+        yield from exe_result
 
 def main_for_test(user_input:str):
     '''

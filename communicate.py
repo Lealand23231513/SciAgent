@@ -5,7 +5,6 @@ from langchain.prompts import PromptTemplate
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain.chains.question_answering import load_qa_chain
 from langchain_openai import OpenAI
-# from search_and_download import download_arxiv_pdf
 import logging
 from pathlib import Path
 import os

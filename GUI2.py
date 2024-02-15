@@ -6,10 +6,11 @@ import logging
 from controler import main_for_test,main
 import shutil
 from pathlib import Path
+from utils import DEFAULT_CACHE_DIR
 
 def upload(file_obj):
     load_dotenv()
-    cache_dir = os.environ['DEFAULT_CACHE_DIR']
+    cache_dir = DEFAULT_CACHE_DIR
     dst_path = shutil.copy(Path(file_obj.name), Path(cache_dir))
     logger.info('File {} uploaded successfully!'.format(os.path.basename(dst_path)))
     gr.Info('File {} uploaded successfully!'.format(os.path.basename(dst_path)))
