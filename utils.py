@@ -87,8 +87,7 @@ def result_parser(raw_exe_result, exe_module:str, query:str|None=None, stream=Fa
     if exe_module == 'websearch':
         if query is None:
             raise Exception('query is None and exe_module is websearch!')
-        user_msg = f"The following Json array contains some papers' metadata, please reply to the user's input according to the information the JSON array contained. You should offer reference to the paper you mentioned. Don't use any expression that has similar meaning with \"According to the JSON array\" in your reply.\nJSON array:\n{raw_exe_result}\n\nuser's input:\n{query}"
-        user_msg = f"Reply to the user's input according to the information the JSON array contained. You should offer reference to the paper you mentioned. Answer the question directly without using any expression that is similar to \"According to the JSON array\" or \"In the given JSON array\" in your reply.\nJSON array:\n{raw_exe_result}\n\nuser's input:\n{query}"
+        user_msg = f"Reply to the user's input according to the information that is in JSON array format and contained some paper's metadata. You should provide reference to the papers you mentioned. Answer the question directly without using any expression that is similar to \"According to the JSON array\" or \"In the given JSON array\" in your reply.\nJSON array:\n{raw_exe_result}\n\nuser's input:\n{query}"
         messages = [
             {"role": "system", "content": system_msg},
             {"role": "user", "content": user_msg}
