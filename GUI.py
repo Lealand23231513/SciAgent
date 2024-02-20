@@ -7,6 +7,8 @@ from Retrieval_qa import Cache
 import os
 from utils import DEFAULT_CACHE_DIR, TOOLS_LIST
 from typing import cast
+from ws_server import WebSocketServer
+import global_var
 
 def clear_cache(dstState:Cache):
     dstState.clear_all()
@@ -52,12 +54,15 @@ def upload(file_obj, dstState:Cache):
     return [[i] for i in dstState.all_files], dstState
 
 def create_ui():
-    with gr.Blocks(title='SciAgent', theme='soft') as demo:
+    html = None
+    with open('websocket.html',encoding='utf-8') as f:
+        html = f.read()
+    with gr.Blocks(title='SciAgent', theme='soft', head=html) as demo:
         with gr.Tab(label='chat'):
             with gr.Row():
                 with gr.Column(scale=3):
                     chatbot = gr.Chatbot(label="SciAgent", height=900)
-                    txtbot = gr.Textbox(label="Your message:", placeholder="Input here")
+                    txtbot = gr.Textbox(label="Your message:", placeholder="Input here", lines=4)
                     chat_history = gr.State([])
                 with gr.Column(scale=1):
                     with gr.Row():
@@ -120,12 +125,17 @@ def create_ui():
 
 # 启动Gradio界面
 if __name__ == '__main__':
+    global server
     print(gr.__version__)
     load_dotenv()
     if os.path.exists(Path(DEFAULT_CACHE_DIR)) == False:
         os.mkdir(Path(DEFAULT_CACHE_DIR))
     logging.basicConfig(level = logging.INFO, format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(Path(__file__).stem)
-    logger.info('SciAgent start!')
+    server = WebSocketServer()
+    global_var._init()
+    server.load_server()
+    global_var.set_value('ws_server',server)
     demo = create_ui()
+    logger.info('SciAgent start!')
     demo.queue().launch(share=False, inbrowser=True)

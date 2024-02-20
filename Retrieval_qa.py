@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from utils import fn_args_generator
 from typing import cast
 from cache import Cache
+from langchain_core.tools import tool
 
 
 logger = logging.getLogger(Path(__file__).stem)
@@ -24,9 +25,10 @@ question: {question}
 """
 
 
-
+@tool
 def retrieval(query:str, path:str|None=None, stream=False) -> str:
     '''
+    Retrieve the content of the cached papers and response to the user's query.
     :param query: User's question about the paper
     :param path: path or url of the paper
     '''
