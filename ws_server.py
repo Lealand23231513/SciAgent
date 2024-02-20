@@ -10,6 +10,7 @@ import logging
 
 logger = logging.getLogger(Path(__file__).stem)
 class WebSocketServer(object):
+    #TODO: How to stop the server?
     def __init__(self, host="localhost", port=5001) -> None:
         self.host = host
         self.port = port
