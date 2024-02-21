@@ -1,19 +1,21 @@
 import gradio as gr
 import logging
-from controler import main_for_test,main
+from controler import main_for_test,main, call_agent
 from pathlib import Path
 from dotenv import load_dotenv
 from Retrieval_qa import Cache
 import os
 from utils import DEFAULT_CACHE_DIR, TOOLS_LIST
 from typing import cast
-from ws_server import WebSocketServer
+from ws_server import load_ws_server
 import global_var
+from cache import load_cache
 
-def clear_cache(dstState:Cache):
-    dstState.clear_all()
+def clear_cache():
+    cache = load_cache()
+    cache.clear_all()
     gr.Info(f'All cached files are cleaned.')
-    return [], dstState
+    return []
 
 
 
@@ -25,7 +27,7 @@ def add_input(user_input, chatbot, tools_ddl:list):
             tools_ddl
             )
 
-def submit(chatbot, chat_history, tools_ddl:list):
+def submit(chatbot, chat_history, tools_ddl:list, downloadChkValue:bool):
     user_input = chatbot[-1][0]
     chat_history.append(
         {
@@ -34,10 +36,19 @@ def submit(chatbot, chat_history, tools_ddl:list):
         }
     )
     full_response = ""
-    for ai_response in main(user_input, chat_history, tools=tools_ddl, stream=True):
+    tools = [
+        {
+            "name": tool,
+            "kwargs":{
+                "download":downloadChkValue
+            }
+        }
+        for tool in tools_ddl
+    ]
+    for ai_response in call_agent(user_input, chat_history, tools=tools, stream=True):
         full_response += str(ai_response)    #type: ignore
         chatbot[-1] = (chatbot[-1][0], full_response)
-        yield chatbot, chat_history, tools_ddl
+        yield chatbot, chat_history, tools_ddl, downloadChkValue
     chat_history.append(
         {
             "role": "assistant",
@@ -45,13 +56,14 @@ def submit(chatbot, chat_history, tools_ddl:list):
         }
     )
     logger.info("submit end")
-    return chatbot, chat_history, tools_ddl
+    return chatbot, chat_history, tools_ddl, downloadChkValue
 
-def upload(file_obj, dstState:Cache):
-    dstState.cache_file(str(Path(file_obj.name)))
+def upload(file_obj):
+    cache = load_cache()
+    cache.cache_file(str(Path(file_obj.name)))
     gr.Info('File {} uploaded successfully!'.format(os.path.basename(Path(file_obj.name))))
 
-    return [[i] for i in dstState.all_files], dstState
+    return [[i] for i in cache.all_files]
 
 def create_ui():
     html = None
@@ -66,7 +78,7 @@ def create_ui():
                     chat_history = gr.State([])
                 with gr.Column(scale=1):
                     with gr.Row():
-                        tools_ddl = gr.Dropdown(
+                        toolsDdl = gr.Dropdown(
                             cast(list[str | int | float | tuple[str, str | int | float]] | None, TOOLS_LIST),  
                             multiselect=True, 
                             label="Tools", 
@@ -75,42 +87,52 @@ def create_ui():
                         )
                         
                     with gr.Row():
-                        file_btn = gr.File(label="click to upload .pdf or .docx file", file_types=['.pdf','.docx'])
+                        uploadFileBtn = gr.File(
+                            label="click to upload .pdf or .docx file", 
+                            file_types=['.pdf','.docx']
+                        )
                         
                     with gr.Row():
-                        cl_cache_btn = gr.Button('Clear all cached files')
+                        cleanCacheBtn = gr.Button('Clear all cached files')
+                    with gr.Group():
+                        downloadChk = gr.Checkbox(
+                            label='download',
+                        )
                         
             with gr.Row():
-                clear_btn = gr.ClearButton([txtbot,chatbot,chat_history])
-                submit_btn = gr.Button("Submit")
+                clearBtn = gr.ClearButton([txtbot,chatbot,chat_history])
+                submitBtn = gr.Button("Submit")
                 
         with gr.Tab(label='Cached papers'):
-            dstState = gr.State(Cache())
+            cache = load_cache()
             dstCachedPapers = gr.Dataset(
-                components=[gr.Textbox(visible=False)], label='Cached papers',
-                samples=[[i] for i in dstState.value.all_files]
-                )
+                components=[gr.Textbox(visible=False)], 
+                label='Cached papers',
+                samples=[[i] for i in cache.all_files]
+            )
         with gr.Tab(label='log'):
             pass
         # with gr.Column():
         #     state_txt_box = gr.Textbox()
-        file_btn.upload(
+        uploadFileBtn.upload(
             upload,
-            inputs=[file_btn, dstState], 
-            outputs=[dstCachedPapers, dstState],
-            queue=True)
-            
-        cl_cache_btn.click(
+            inputs=[uploadFileBtn], 
+            outputs=[dstCachedPapers],
+            queue=True
+        )
+        
+        cleanCacheBtn.click(
             clear_cache,
-            inputs=[dstState],
-            outputs=[dstCachedPapers, dstState])
+            inputs=[],
+            outputs=[dstCachedPapers]
+        )
 
-        submit_btn.click(
+        submitBtn.click(
             fn = add_input, 
-            inputs = [txtbot, chatbot, tools_ddl], 
-            outputs = [txtbot, chatbot, tools_ddl]
+            inputs = [txtbot, chatbot, toolsDdl], 
+            outputs = [txtbot, chatbot, toolsDdl]
         ).then(
-            fn = submit, inputs = [chatbot, chat_history, tools_ddl], outputs=[chatbot, chat_history, tools_ddl]
+            fn = submit, inputs = [chatbot, chat_history, toolsDdl, downloadChk], outputs=[chatbot, chat_history, toolsDdl, downloadChk]
         ).then(
             fn = lambda : gr.Textbox(label="Your message:", interactive=True, placeholder="Input here"), inputs = None, outputs = [txtbot]
         )
@@ -125,17 +147,15 @@ def create_ui():
 
 # 启动Gradio界面
 if __name__ == '__main__':
-    global server
-    print(gr.__version__)
     load_dotenv()
+    global_var._init()
     if os.path.exists(Path(DEFAULT_CACHE_DIR)) == False:
         os.mkdir(Path(DEFAULT_CACHE_DIR))
     logging.basicConfig(level = logging.INFO, format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(Path(__file__).stem)
-    server = WebSocketServer()
-    global_var._init()
-    server.load_server()
-    global_var.set_value('ws_server',server)
+    logger.info(f'gradio version:{gr.__version__}')
+    server = load_ws_server()
+    cache = load_cache()
     demo = create_ui()
     logger.info('SciAgent start!')
     demo.queue().launch(share=False, inbrowser=True)

@@ -1,4 +1,5 @@
 # 核心控制模块
+from typing import Mapping
 import openai
 import os
 import json
@@ -9,7 +10,11 @@ from Retrieval_qa import retrieval_auto_runner
 from utils import *
 # from websearch import *
 from websearch2 import *
+from websearch2 import get_customed_arxiv_search_tool
+from Retrieval_qa import get_retrieval_tool
 from communicate import communicator_auto_runner
+from global_var import get_global_value, set_global_value
+from langchain.agents import create_openai_functions_agent
 
 logger = logging.getLogger(Path(__file__).stem)
 
@@ -47,6 +52,34 @@ def main(user_input:str, history, tools:list, stream:bool = False):
             retrieval_result = retrieval_auto_runner(task['todo']+f"\nuser's query:\n{user_input}", functions, history)
             exe_result = retrieval_result
         yield from exe_result
+
+
+def call_agent(user_input:str, history:list[Mapping[str,str]], tools:list, stream:bool = False):
+    load_dotenv()
+    openai.api_key = os.getenv('OPENAI_API_KEY')
+    # agent_executor = cast(AgentExecutor ,get_global_value('agent_executor'))
+    # if agent_executor is None:
+    llm = ChatOpenAI(model='gpt-3.5-turbo-0125',temperature=0.5)
+    tools_mapping ={
+        "websearch": partial(get_customed_arxiv_search_tool, load_all_available_meta=True),
+        "retrieve": get_retrieval_tool
+    }
+    tools_obj = [tools_mapping[tool['name']](**tool['kwargs']) for tool in tools]
+    prompt = hub.pull("hwchase17/openai-functions-agent")
+    agent = create_openai_functions_agent(llm, tools_obj, prompt)
+    agent_executor = AgentExecutor(agent=agent, tools=tools_obj, handle_parsing_errors=True)#type: ignore
+    set_global_value('agent_executor', agent_executor)
+    ans = agent_executor.invoke(
+    {
+        "chat_history":[convert_dict_to_message(m) for m in history],
+        "input": user_input
+    })
+    logger.info({k:ans[k] for k in ('input', 'output')})
+    if stream:
+        # fake stream
+        yield from ans['output']
+    else:
+        return ans['output']
 
 def main_for_test(user_input:str):
     '''

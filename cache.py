@@ -12,8 +12,16 @@ import os
 import json
 from langchain.indexes import SQLRecordManager, index
 from typing import cast
+from global_var import get_global_value, set_global_value
 from utils import DEFAULT_CACHE_DIR
 from typing import cast
+
+def load_cache():
+    cache = cast(Cache, get_global_value('cache'))
+    if cache is None:
+        cache = Cache()
+        set_global_value('cache',cache)
+    return cache
 
 class Cache(object):
     def __init__(self, all_files=None, vectorstore=None, record_manager=None) -> None:

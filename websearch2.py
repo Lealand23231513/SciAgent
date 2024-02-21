@@ -16,7 +16,7 @@ from pydantic import BaseModel, root_validator
 from langchain.schema import Document
 import multiprocessing
 logger = logging.getLogger(Path(__file__).stem)
-from arxiv.arxiv import SortCriterion, SortOrder
+from arxiv import SortCriterion, SortOrder
 from utils import DEFAULT_CACHE_DIR, fn_args_generator
 from langchain_core.tools import tool
 from langchain import hub
@@ -39,7 +39,8 @@ class CustomedArxivAPIWrapper(ArxivAPIWrapper):
             if k != "download":
                 super_kwargs[k]=kwargs[k]
         super().__init__(**super_kwargs)
-        self.download = kwargs['download']
+        if kwargs.get('download'):
+            self.download = True
     def run(self, query: str) -> str:
         """
         Performs an arxiv search and A single string
@@ -53,6 +54,8 @@ class CustomedArxivAPIWrapper(ArxivAPIWrapper):
         Args:
             query: a plaintext search query
         """  # noqa: E501
+        logger = logging.getLogger('.'.join((Path(__file__).stem, self.__class__.__name__)))
+        logger.info('Arxiv search start')
         try:
             if self.is_arxiv_identifier(query):
                 results = self.arxiv_search(
@@ -67,14 +70,17 @@ class CustomedArxivAPIWrapper(ArxivAPIWrapper):
             return f"Arxiv exception: {ex}"
         docs = []
         pool = multiprocessing.Pool()
-        server = cast(WebSocketServer,global_var.get_value('ws_server'))
         for result in results:
             if self.download:
                 msg = f"Do you want to download file {result.title}?"
-                res = server.contact([msg])
-                print(res)
-                if res[0]['a'] == True:
-                    pool.apply(partial(result.download_pdf, dirpath=DEFAULT_CACHE_DIR+'/cached-files'))
+                server = cast(WebSocketServer,global_var.get_global_value('ws_server'))
+                res = server.contact(msg)
+                if res['a'] == True:
+                    pool.apply_async(
+                        partial(result.download_pdf, dirpath=DEFAULT_CACHE_DIR+'/cached-files'), 
+                        callback=lambda x:logger.info(f'successfully download {result.title}'), 
+                        error_callback=lambda err:logger.error(err)
+                    )
             if self.load_all_available_meta:
                 extra_metadata = {
                     "entry_id": result.entry_id,
@@ -96,6 +102,7 @@ class CustomedArxivAPIWrapper(ArxivAPIWrapper):
                 **extra_metadata,
             }
             texts = ['{}: {}'.format(k, metadata[k]) for k in metadata.keys()]
+            logger.info(texts)
             docs.append('\n'.join(texts))
         pool.close()
         pool.join()
@@ -104,14 +111,14 @@ class CustomedArxivAPIWrapper(ArxivAPIWrapper):
         else:
             return "No good Arxiv Result was found"
 
-def customed_get_arxiv_search(**kwargs) -> BaseTool:
+def get_customed_arxiv_search_tool(**kwargs) -> BaseTool:
     extra_keys = ["top_k_results", "load_max_docs", "load_all_available_meta", "download"]
     sub_kwargs = {k: kwargs[k] for k in extra_keys if k in kwargs}
     return ArxivQueryRun(api_wrapper=CustomedArxivAPIWrapper(**sub_kwargs))
 
 def arxiv_search_with_agent(user_input:str):
     llm = ChatOpenAI(model='gpt-3.5-turbo-0125',temperature=0.5)
-    tools = [customed_get_arxiv_search(load_all_available_meta=True, download=True)]
+    tools = [get_customed_arxiv_search_tool(load_all_available_meta=True, download=True)]
     prompt = hub.pull("hwchase17/react")
     agent = create_react_agent(llm, tools, prompt)
     agent_executor = AgentExecutor(agent=agent, tools=tools, handle_parsing_errors=True)#type: ignore
@@ -122,18 +129,3 @@ def arxiv_search_with_agent(user_input:str):
     )
     logger.info(ans)
     return ans['output']
-
-def download_arxiv_pdf(paper_info, folder_name = Path("./.cache"), replace_exist = False):
-    trans_file_name = parse.quote(paper_info["Title"], safe='') + '.pdf'
-    file_path = os.path.abspath(os.path.join(folder_name,  trans_file_name))
-    pdf_url = paper_info["url"]
-    response = requests.get(pdf_url)
-    response.raise_for_status() # raise HTTPError
-
-    # 如果文件已经存在，抛出异常，需要用户决定是否下载更换文件
-    #TODO if replace_exist == False and os.path.exists(file_path):
-    #     raise Exception(f"Path {file_path} already exist, do you want to replace it?")
-        
-    with open(file_path, 'wb') as pdf_file:
-        pdf_file.write(response.content)
-    return file_path

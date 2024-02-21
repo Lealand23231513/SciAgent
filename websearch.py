@@ -16,7 +16,7 @@ from pydantic import BaseModel, root_validator
 from langchain.schema import Document
 
 logger = logging.getLogger(Path(__file__).stem)
-from arxiv.arxiv import SortCriterion, SortOrder
+from arxiv import SortCriterion, SortOrder
 from utils import fn_args_generator
 from langchain_core.tools import tool
 from langchain import hub
