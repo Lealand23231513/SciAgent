@@ -1,3 +1,4 @@
+from urllib import response
 import gradio as gr
 import logging
 from controler import main_for_test,main, call_agent
@@ -6,18 +7,32 @@ from dotenv import load_dotenv
 from Retrieval_qa import Cache
 import os
 from utils import DEFAULT_CACHE_DIR, TOOLS_LIST
+from gradio_modal import Modal
 from typing import cast
 from ws_server import load_ws_server
 import global_var
 from cache import load_cache
+from channel import load_channel
+import json
+import time
+
+
+
+
+def _init_state_vars():
+    global state, timestamp
+    state = {
+        "type": None,
+        "name": None,
+        "message": None
+    }
+    timestamp = str(time.time())
 
 def clear_cache():
     cache = load_cache()
     cache.clear_all()
     gr.Info(f'All cached files are cleaned.')
     return []
-
-
 
 def add_input(user_input, chatbot, tools_ddl:list):
     chatbot.append((user_input,None))
@@ -64,12 +79,59 @@ def upload(file_obj):
     gr.Info('File {} uploaded successfully!'.format(os.path.basename(Path(file_obj.name))))
 
     return [[i] for i in cache.all_files]
+def confirmBtn_click():
+    global state
+    response_msg = json.dumps(
+        {
+            **state,
+            "response": True
+        }
+    )
+    channel = load_channel()
+    channel.send(response_msg, 'front')
+    return Modal(visible=False)
+def modal_blur():
+    global state
+    response_msg = json.dumps(
+        {
+            **state,
+            "response": False
+        }
+    )
+    channel.send(response_msg, 'front')
+    return Modal(visible=False)
+def get_timestamp():
+    global timestamp, state
+    response = channel.recv('front')
+    if response is not None:
+        timestamp = str(time.time())
+        state = json.loads(response)
+    else:
+        state = {
+            "type": None,
+            "name": None,
+            "message": None
+        }
+    return timestamp
+    
 
 def create_ui():
+    def _state_change():
+        global state
+        if state['type'] == 'funcall':
+            if state['name'] == 'confirm':
+                return {
+                    modal: Modal(visible=True, allow_user_close=False),
+                    modalMsg: state['message']
+                }
+        return {
+            modal: Modal(visible=False),
+            modalMsg: ''
+        }
     html = None
     with open('websocket.html',encoding='utf-8') as f:
         html = f.read()
-    with gr.Blocks(title='SciAgent', theme='soft', head=html) as demo:
+    with gr.Blocks(title='SciAgent', theme='soft') as demo:
         with gr.Tab(label='chat'):
             with gr.Row():
                 with gr.Column(scale=3):
@@ -94,7 +156,7 @@ def create_ui():
                         
                     with gr.Row():
                         cleanCacheBtn = gr.Button('Clear all cached files')
-                    with gr.Group():
+                    with gr.Accordion(label='websearch params', open=False):
                         downloadChk = gr.Checkbox(
                             label='download',
                         )
@@ -114,6 +176,29 @@ def create_ui():
             pass
         # with gr.Column():
         #     state_txt_box = gr.Textbox()
+        timeStampDisp = gr.Textbox(label='time stamp', value=get_timestamp, every=1, visible=False)
+        with Modal(visible=False) as modal:
+            modalMsg = gr.Markdown()
+            with gr.Row():
+                confirmBtn = gr.Button("Yes")
+                cancelBtn = gr.Button("No")
+        confirmBtn.click(
+            confirmBtn_click,
+            inputs=None, 
+            outputs=modal,
+            show_progress='hidden'
+        )
+        gr.on(
+            [cancelBtn.click, modal.blur],
+            modal_blur,
+            outputs=[modal],# type: ignore
+            show_progress='hidden'
+        )
+        timeStampDisp.change(
+            _state_change,
+            inputs=None,
+            outputs=[modal, modalMsg]
+        )
         uploadFileBtn.upload(
             upload,
             inputs=[uploadFileBtn], 
@@ -132,11 +217,13 @@ def create_ui():
             inputs = [txtbot, chatbot, toolsDdl], 
             outputs = [txtbot, chatbot, toolsDdl]
         ).then(
-            fn = submit, inputs = [chatbot, chat_history, toolsDdl, downloadChk], outputs=[chatbot, chat_history, toolsDdl, downloadChk]
+            fn = submit, 
+            inputs = [chatbot, chat_history, toolsDdl, downloadChk], 
+            outputs=[chatbot, chat_history, toolsDdl, downloadChk],
+            show_progress='hidden'
         ).then(
             fn = lambda : gr.Textbox(label="Your message:", interactive=True, placeholder="Input here"), inputs = None, outputs = [txtbot]
         )
-
 
 
             
@@ -153,9 +240,11 @@ if __name__ == '__main__':
         os.mkdir(Path(DEFAULT_CACHE_DIR))
     logging.basicConfig(level = logging.INFO, format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(Path(__file__).stem)
-    logger.info(f'gradio version:{gr.__version__}')
-    server = load_ws_server()
+    logger.info(f'gradio version: {gr.__version__}')
+    # server = load_ws_server()
+    channel = load_channel()
     cache = load_cache()
+    _init_state_vars()
     demo = create_ui()
     logger.info('SciAgent start!')
     demo.queue().launch(share=False, inbrowser=True)

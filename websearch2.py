@@ -29,6 +29,7 @@ from functools import partial
 import global_var
 from typing import cast
 from ws_server import WebSocketServer
+from channel import Channel
 
 
 class CustomedArxivAPIWrapper(ArxivAPIWrapper):
@@ -72,10 +73,20 @@ class CustomedArxivAPIWrapper(ArxivAPIWrapper):
         pool = multiprocessing.Pool()
         for result in results:
             if self.download:
-                msg = f"Do you want to download file {result.title}?"
-                server = cast(WebSocketServer,global_var.get_global_value('ws_server'))
-                res = server.contact(msg)
-                if res['a'] == True:
+                msg = json.dumps(
+                    {
+                        "type": "funcall",
+                        "name": "confirm",
+                        "message": f"Do you want to download file {result.title}?"
+                    }
+                ) 
+                
+                # server = cast(WebSocketServer,global_var.get_global_value('ws_server'))
+                # res = server.contact(msg)
+                channel = cast(Channel, global_var.get_global_value('channel'))
+                res = cast(str, channel.push(msg,require_response=True))
+                res = json.loads(res)
+                if res['response'] == True:
                     pool.apply_async(
                         partial(result.download_pdf, dirpath=DEFAULT_CACHE_DIR+'/cached-files'), 
                         callback=lambda x:logger.info(f'successfully download {result.title}'), 
