@@ -4,14 +4,11 @@ from langchain.chains import RetrievalQA
 import logging
 from pathlib import Path
 import os
-import json
 import openai
-import re
 from dotenv import load_dotenv
 from utils import fn_args_generator
 from typing import Callable, cast
 from cache import Cache
-from langchain_core.tools import tool
 from typing import Optional, Type
 
 from langchain_core.callbacks import CallbackManagerForToolRun

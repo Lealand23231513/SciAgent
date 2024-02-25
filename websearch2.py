@@ -1,26 +1,12 @@
-from ast import mod
-from typing_extensions import Unpack
-import arxiv
-from pydantic.config import ConfigDict
-import requests
-import openai
 import json
 import os
 import logging
 from pathlib import Path
-from urllib import parse
-from enum import Enum
-from typing import Any, Dict, List, Optional, Union, ClassVar
-
-from pydantic import BaseModel, root_validator
-from langchain.schema import Document
 import multiprocessing
 logger = logging.getLogger(Path(__file__).stem)
-from arxiv import SortCriterion, SortOrder
-from utils import DEFAULT_CACHE_DIR, fn_args_generator
-from langchain_core.tools import tool
+from utils import DEFAULT_CACHE_DIR
 from langchain import hub
-from langchain.agents import AgentExecutor, create_react_agent, load_tools
+from langchain.agents import AgentExecutor, create_react_agent
 from langchain_openai import ChatOpenAI
 from langchain_community.utilities import ArxivAPIWrapper
 from langchain_community.tools.arxiv.tool import ArxivQueryRun
@@ -28,7 +14,6 @@ from langchain_core.tools import BaseTool
 from functools import partial
 import global_var
 from typing import cast
-from ws_server import WebSocketServer
 from channel import Channel
 
 
@@ -80,9 +65,6 @@ class CustomedArxivAPIWrapper(ArxivAPIWrapper):
                         "message": f"Do you want to download file \"{result.title}\" ?"
                     }
                 ) 
-                
-                # server = cast(WebSocketServer,global_var.get_global_value('ws_server'))
-                # res = server.contact(msg)
                 channel = cast(Channel, global_var.get_global_value('channel'))
                 res = cast(str, channel.push(msg,require_response=True))
                 res = json.loads(res)

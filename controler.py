@@ -8,11 +8,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 from Retrieval_qa import retrieval_auto_runner
 from utils import *
-# from websearch import *
 from websearch2 import *
 from websearch2 import get_customed_arxiv_search_tool
 from Retrieval_qa import get_retrieval_tool
-from communicate import communicator_auto_runner
 from global_var import get_global_value, set_global_value
 from langchain.agents import create_openai_functions_agent
 
@@ -60,8 +58,6 @@ def main(user_input:str, history, tools:list, stream:bool = False):
     # import env variables
     load_dotenv()
     openai.api_key = os.getenv('OPENAI_API_KEY')
-    user1_input = "I want to find some papers about LLM."
-    user2_input = "I want to write a review about LLM, and I wonder what papers can I refer to? And please write me a summary about the papers."
     
     with open('modules.json', "r") as f:
         module_descriptions = json.load(f)

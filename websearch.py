@@ -1,5 +1,4 @@
-from ast import mod
-from typing_extensions import Unpack
+# deprecated
 import arxiv
 from pydantic.config import ConfigDict
 import requests
