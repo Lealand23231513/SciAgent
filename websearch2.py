@@ -77,7 +77,7 @@ class CustomedArxivAPIWrapper(ArxivAPIWrapper):
                     {
                         "type": "funcall",
                         "name": "confirm",
-                        "message": f"Do you want to download file {result.title}?"
+                        "message": f"Do you want to download file \"{result.title}\" ?"
                     }
                 ) 
                 

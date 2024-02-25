@@ -51,16 +51,16 @@ def submit(chatbot, chat_history, tools_ddl:list, downloadChkValue:bool):
         }
     )
     full_response = ""
-    tools = [
-        {
-            "name": tool,
-            "kwargs":{
-                "download":downloadChkValue
-            }
+    tools = []
+    for tool in tools_ddl:
+        config = {
+            "name":tool,
+            "kwargs": {}
         }
-        for tool in tools_ddl
-    ]
-    for ai_response in call_agent(user_input, chat_history, tools=tools, stream=True):
+        if tool=='websearch':
+            config['kwargs']['download']=downloadChkValue
+        tools.append(config)
+    for ai_response in call_agent(user_input, chat_history, model='gpt-3.5-turbo', tools=tools, stream=True):
         full_response += str(ai_response)    #type: ignore
         chatbot[-1] = (chatbot[-1][0], full_response)
         yield chatbot, chat_history, tools_ddl, downloadChkValue
@@ -156,6 +156,12 @@ def create_ui():
                         
                     with gr.Row():
                         cleanCacheBtn = gr.Button('Clear all cached files')
+                    with gr.Row():
+                        llmDdl = gr.Dropdown(
+                            choices=['gpt-3.5-turbo','chatglm3'],
+                            value=['gpt-3.5-turbo'],
+                            label="Model"
+                        )
                     with gr.Accordion(label='websearch params', open=False):
                         downloadChk = gr.Checkbox(
                             label='download',
@@ -224,12 +230,6 @@ def create_ui():
         ).then(
             fn = lambda : gr.Textbox(label="Your message:", interactive=True, placeholder="Input here"), inputs = None, outputs = [txtbot]
         )
-
-
-            
-
-            
-    
     return demo
 
 # 启动Gradio界面

@@ -18,7 +18,45 @@ from langchain.agents import create_openai_functions_agent
 
 logger = logging.getLogger(Path(__file__).stem)
 
+def load_openai_agent(tools_inst):
+    openai.api_key = os.getenv('OPENAI_API_KEY')
+    llm = ChatOpenAI(model='gpt-3.5-turbo-0125') 
+    prompt = hub.pull("hwchase17/openai-functions-agent")
+    agent = create_openai_functions_agent(llm, tools_inst, prompt)
+    return agent
+
+def call_agent(user_input:str, history:list[Mapping[str,str]], tools:list, model:str, stream:bool = False):
+    load_dotenv()
+    
+    tools_mapping ={
+        "websearch": partial(get_customed_arxiv_search_tool, load_all_available_meta=True),
+        "retrieve": get_retrieval_tool
+    }
+    tools_inst = [tools_mapping[tool['name']](**tool['kwargs']) for tool in tools]
+    # if get_global_value('tools_inst') is None or get_global_value('tools_inst')
+    agent_mapping = {
+        "gpt-3.5-turbo": load_openai_agent 
+    }
+    agent = agent_mapping[model](tools_inst)
+    set_global_value('agent', agent)
+    agent_executor = AgentExecutor(agent=agent, tools=tools_inst, handle_parsing_errors=True)#type: ignore
+    set_global_value('agent_executor', agent_executor)
+    ans = agent_executor.invoke(
+    {
+        "chat_history":[convert_dict_to_message(m) for m in history],
+        "input": user_input
+    })
+    logger.info({k:ans[k] for k in ('input', 'output')})
+    if stream:
+        # fake stream
+        yield from ans['output']
+    else:
+        return ans['output']
+
 def main(user_input:str, history, tools:list, stream:bool = False):
+    '''
+    deprecated
+    '''
     # import env variables
     load_dotenv()
     openai.api_key = os.getenv('OPENAI_API_KEY')
@@ -54,32 +92,7 @@ def main(user_input:str, history, tools:list, stream:bool = False):
         yield from exe_result
 
 
-def call_agent(user_input:str, history:list[Mapping[str,str]], tools:list, stream:bool = False):
-    load_dotenv()
-    openai.api_key = os.getenv('OPENAI_API_KEY')
-    # agent_executor = cast(AgentExecutor ,get_global_value('agent_executor'))
-    # if agent_executor is None:
-    llm = ChatOpenAI(model='gpt-3.5-turbo-0125',temperature=0.5)
-    tools_mapping ={
-        "websearch": partial(get_customed_arxiv_search_tool, load_all_available_meta=True),
-        "retrieve": get_retrieval_tool
-    }
-    tools_obj = [tools_mapping[tool['name']](**tool['kwargs']) for tool in tools]
-    prompt = hub.pull("hwchase17/openai-functions-agent")
-    agent = create_openai_functions_agent(llm, tools_obj, prompt)
-    agent_executor = AgentExecutor(agent=agent, tools=tools_obj, handle_parsing_errors=True)#type: ignore
-    set_global_value('agent_executor', agent_executor)
-    ans = agent_executor.invoke(
-    {
-        "chat_history":[convert_dict_to_message(m) for m in history],
-        "input": user_input
-    })
-    logger.info({k:ans[k] for k in ('input', 'output')})
-    if stream:
-        # fake stream
-        yield from ans['output']
-    else:
-        return ans['output']
+
 
 def main_for_test(user_input:str):
     '''

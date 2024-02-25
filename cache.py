@@ -1,7 +1,6 @@
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain_community.vectorstores import Chroma
-from langchain_openai import ChatOpenAI, OpenAI
 from langchain.prompts import PromptTemplate
 from langchain.output_parsers import RegexParser
 from langchain_openai import OpenAIEmbeddings
@@ -27,6 +26,7 @@ class Cache(object):
     def __init__(self, all_files=None, vectorstore=None, record_manager=None) -> None:
         self.filenames_save_path = Path(DEFAULT_CACHE_DIR+'/cached-files.json')
         self.embedding = OpenAIEmbeddings()
+        #TODO: customed embedding
         if all_files is None:
             self.load_filenames()
         else:

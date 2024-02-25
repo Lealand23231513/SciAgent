@@ -1,4 +1,4 @@
-from langchain_openai import ChatOpenAI, OpenAI
+from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
 import logging
@@ -45,7 +45,6 @@ def retrieval(query:str, path:str|None=None) -> str:
         template=prompt_template,
         input_variables=["context", "question"]
     )
-
     chain_type_kwargs = {"prompt": prompt}
     qa_chain = RetrievalQA.from_chain_type(llm=ChatOpenAI(model='gpt-3.5-turbo-0125'), chain_type="stuff",
                                      retriever=cache.vectorstore.as_retriever(),
