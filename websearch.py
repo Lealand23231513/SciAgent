@@ -1,3 +1,4 @@
+from ast import mod
 from typing_extensions import Unpack
 import arxiv
 from pydantic.config import ConfigDict
@@ -15,8 +16,12 @@ from pydantic import BaseModel, root_validator
 from langchain.schema import Document
 
 logger = logging.getLogger(Path(__file__).stem)
-from arxiv.arxiv import SortCriterion, SortOrder
+from arxiv import SortCriterion, SortOrder
 from utils import fn_args_generator
+from langchain_core.tools import tool
+from langchain import hub
+from langchain.agents import AgentExecutor, create_react_agent, load_tools
+from langchain_openai import ChatOpenAI
 
 
 class ArxivAPIWrapper(BaseModel):
@@ -81,7 +86,7 @@ def arxiv_auto_search(user_input:str, functions, history = [], sort_by:SortCrite
     arxiv_result = arxiv_wrapper.run(f"""{query}""",sort_by,sort_order)
     
     if len(arxiv_result) == 0:
-        raise Exception("No arxiv result found")
+        raise ValueError("No arxiv result found")
 
     logger.info("get results:")
     for i,sub_dict in enumerate(arxiv_result):
@@ -90,6 +95,22 @@ def arxiv_auto_search(user_input:str, functions, history = [], sort_by:SortCrite
         logger.debug(f"{i+1}.{json.dumps(sub_dict)}")
 
     return arxiv_result
+
+def arxiv_search_with_agent(user_input:str):
+    llm = ChatOpenAI(model='gpt-3.5-turbo-0125',temperature=0.5)
+    tools = load_tools(
+        ["arxiv"],
+    )
+    prompt = hub.pull("hwchase17/react")
+    agent = create_react_agent(llm, tools, prompt)
+    agent_executor = AgentExecutor(agent=agent, tools=tools, handle_parsing_errors=True)#type: ignore
+    ans = agent_executor.invoke(
+        {
+            "input": user_input,
+        }
+    )
+    logger.info(ans)
+    return ans['output']
 
 def download_arxiv_pdf(paper_info, folder_name = Path("./.cache"), replace_exist = False):
     trans_file_name = parse.quote(paper_info["Title"], safe='') + '.pdf'

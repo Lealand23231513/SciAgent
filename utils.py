@@ -1,4 +1,5 @@
 from langchain_openai import ChatOpenAI
+from matplotlib.mathtext import RasterParse
 from openai import OpenAI
 import json
 import os
@@ -13,6 +14,10 @@ from langchain.schema import BaseOutputParser
 from langchain.chains import LLMChain
 import logging
 from pathlib import Path
+
+from regex import P
+DEFAULT_CACHE_DIR = ".cache"
+TOOLS_LIST = ["websearch", "retrieve"]
 
 
 logger = logging.getLogger(Path(__file__).stem)
@@ -68,19 +73,34 @@ def task_decider(user_input:str, module_descriptions):
         output_parser=output_parser
     )
     
-    response = chain.run(user_input)
-    logger.info(response)
-    return response
+    response = chain.invoke({"text": user_input})
+    logger.info(response['text'])
+    return response['text']
 
 
-def reporter(exe_result, stream=False, api_key:str|None=None):
+def result_parser(raw_exe_result, exe_module:str, query:str|None=None, stream=False, api_key:str|None=None):
     '''
-    Report execution result of this step to the user.
+    Parse execution result of execution to the user.
     '''
-    messages = [
-                {"role": "system", "content": "Report the full execution result to the user."},
-                {"role": "assistant", "content": f"{exe_result}"}
-            ]
+    system_msg = 'You are a useful assistant that can summary, induction, extract information.'
+    messages = []
+    if exe_module == 'websearch':
+        if query is None:
+            raise Exception('query is None and exe_module is websearch!')
+        user_msg = f"Reply to the user's input according to the information that is in JSON array format and contained some paper's metadata. You should provide reference to the papers you mentioned. Answer the question directly without using any expression that is similar to \"According to the JSON array\" or \"In the given JSON array\" in your reply.\nJSON array:\n{raw_exe_result}\n\nuser's input:\n{query}"
+        messages = [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_msg}
+        ]
+    elif exe_module == 'retrieve':
+        raise Exception('retrieve does not need a result_parser')
+    elif exe_module == 'exception':
+        user_msg = f"Reply to the user's input according to the information. Answer directly without using any expression such as \"accoring to the information\" or \"in the information\".\ninformation:\n{raw_exe_result}\nuser\'s input:\n{query}"
+        messages = [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_msg}
+        ]
+    
     messages = [convert_dict_to_message(m) for m in messages]
     llm = ChatOpenAI(model='gpt-3.5-turbo-0125',streaming=stream, api_key=api_key)
     for chunk in llm.stream(messages):
@@ -111,6 +131,7 @@ def fn_args_generator(query:str, functions, history = []):
         function_call="auto",  
     )
     response_message = response.choices[0].message
+    logger.debug(response_message)
     if response_message.function_call:
         function_args = json.loads(response_message.function_call.arguments)
         return function_args  

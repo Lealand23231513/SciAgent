@@ -3,7 +3,7 @@ from langchain.chains.summarize import load_summarize_chain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain.prompts import PromptTemplate
-from search_and_download import download_arxiv_pdf
+from websearch import download_arxiv_pdf
 import os
 import json
 import openai

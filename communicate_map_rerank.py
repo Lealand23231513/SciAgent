@@ -8,7 +8,6 @@ from langchain.chains.question_answering import load_qa_chain
 from langchain.output_parsers import RegexParser
 from langchain_openai import OpenAIEmbeddings
 from langchain.chains import RetrievalQA
-from search_and_download import download_arxiv_pdf
 import logging
 from pathlib import Path
 import os
