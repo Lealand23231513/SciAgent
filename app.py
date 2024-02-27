@@ -72,7 +72,7 @@ def submit(chatbot, chat_history, tools_ddl:list, downloadChkValue:bool):
 
 def upload(file_obj):
     cache = load_cache()
-    cache.cache_file(str(Path(file_obj.name)))
+    cache.cache_file(str(Path(file_obj.name)), save_local=True)
     gr.Info('File {} uploaded successfully!'.format(os.path.basename(Path(file_obj.name))))
 
     return [[i] for i in cache.all_files]
@@ -224,6 +224,8 @@ def create_ui():
             inputs = [chatbot, chat_history, toolsDdl, downloadChk], 
             outputs=[chatbot, chat_history, toolsDdl, downloadChk],
             show_progress='hidden'
+        ).then(
+            fn = lambda: [[i] for i in cache.all_files], outputs=[dstCachedPapers]
         ).then(
             fn = lambda : gr.Textbox(label="Your message:", interactive=True, placeholder="Input here"), inputs = None, outputs = [txtbot]
         )

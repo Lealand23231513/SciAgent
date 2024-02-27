@@ -8,6 +8,7 @@ from langchain.chains import RetrievalQA
 import logging
 from pathlib import Path
 import os
+import shutil
 import json
 from langchain.indexes import SQLRecordManager, index
 from typing import cast
@@ -24,7 +25,12 @@ def load_cache():
 
 class Cache(object):
     def __init__(self, all_files=None, vectorstore=None, record_manager=None) -> None:
-        self.filenames_save_path = Path(DEFAULT_CACHE_DIR+'/cached-files.json')
+        self.filenames_save_path = Path(DEFAULT_CACHE_DIR)/'cached-files.json'
+        # if self.filenames_save_path.exists() == False:
+        self.filenames_save_path.touch()
+        self.cached_files_dir = Path(DEFAULT_CACHE_DIR)/'cached-files'
+        if self.cached_files_dir.exists()==False:
+            self.cached_files_dir.mkdir()
         self.embedding = OpenAIEmbeddings()
         #TODO: customed embedding
         if all_files is None:
@@ -70,16 +76,23 @@ class Cache(object):
             json.dump(self.all_files, f)
     def clear_all(self):
         # clear all cached data
+        #TODO clear cached files
         self.all_files = []
         self.save_filenames()
+        cached_files_path = Path(DEFAULT_CACHE_DIR)/'cached-files'
+        for file in cached_files_path.iterdir():
+            file.unlink()
         logger = logging.getLogger(Path(__file__).stem)
         logger.info(f'All files in directory {DEFAULT_CACHE_DIR} are cleaned.')
         return index([], self.record_manager, self.vectorstore, cleanup="full", source_id_key="source")
-    def cache_file(self, path:str, chunk_size=1000, chunk_overlap=200, add_start_index=True):
+    def cache_file(self, path:str, save_local=False, chunk_size=1000, chunk_overlap=200, add_start_index=True):
         '''
-        :param path: path or url of the paper
+        :param path: path or url of the file
+        :param save_local: whether or not save the uploaded file in local cache folder
         :param chunk_size: max length of the chunk
         '''
+        if save_local == True:
+            shutil.copy(path, Path(DEFAULT_CACHE_DIR+'/cached-files'))
         if(path.split(".")[-1] == 'pdf'):
             loader = PyPDFLoader(path)
         elif(path.split(".")[-1] == 'docx'):

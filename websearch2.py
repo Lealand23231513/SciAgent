@@ -3,6 +3,7 @@ import os
 import logging
 from pathlib import Path
 import multiprocessing
+from cache import load_cache
 logger = logging.getLogger(Path(__file__).stem)
 from utils import DEFAULT_CACHE_DIR
 from langchain import hub
@@ -41,6 +42,11 @@ class CustomedArxivAPIWrapper(ArxivAPIWrapper):
             query: a plaintext search query
         """  # noqa: E501
         logger = logging.getLogger('.'.join((Path(__file__).stem, self.__class__.__name__)))
+        def download_callback(written_path):
+            cache = load_cache()
+            cache.cache_file(written_path)
+            logger.info(f'successfully download {Path(written_path).name}')
+        
         logger.info('Arxiv search start')
         try:
             if self.is_arxiv_identifier(query):
@@ -71,7 +77,7 @@ class CustomedArxivAPIWrapper(ArxivAPIWrapper):
                 if res['response'] == True:
                     pool.apply_async(
                         partial(result.download_pdf, dirpath=DEFAULT_CACHE_DIR+'/cached-files'), 
-                        callback=lambda x:logger.info(f'successfully download {result.title}'), 
+                        callback=download_callback, 
                         error_callback=lambda err:logger.error(err)
                     )
             if self.load_all_available_meta:
