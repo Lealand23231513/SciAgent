@@ -17,7 +17,7 @@ from pathlib import Path
 
 from regex import P
 DEFAULT_CACHE_DIR = ".cache"
-TOOLS_LIST = ["websearch", "retrieve"]
+TOOLS_LIST = ["联网搜索", "检索"]
 
 
 logger = logging.getLogger(Path(__file__).stem)

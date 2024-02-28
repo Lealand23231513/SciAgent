@@ -16,26 +16,26 @@ from langchain.agents import create_openai_functions_agent
 
 logger = logging.getLogger(Path(__file__).stem)
 
-def load_openai_agent(tools_inst):
+def load_openai_agent(tools_inst, temperature_parameter:float):
     openai.api_key = os.getenv('OPENAI_API_KEY')
-    llm = ChatOpenAI(model='gpt-3.5-turbo-0125') 
+    llm = ChatOpenAI(model='gpt-3.5-turbo-0125', temperature=temperature_parameter) 
     prompt = hub.pull("hwchase17/openai-functions-agent")
     agent = create_openai_functions_agent(llm, tools_inst, prompt)
     return agent
 
-def call_agent(user_input:str, history:list[Mapping[str,str]], tools:list, model:str, stream:bool = False):
+def call_agent(user_input:str, history:list[Mapping[str,str]], tools:list, model:str, stream:bool = False, temperature_4:float = 0.7):
     load_dotenv()
     
     tools_mapping ={
-        "websearch": partial(get_customed_arxiv_search_tool, load_all_available_meta=True),
-        "retrieve": get_retrieval_tool
+        "联网搜索": partial(get_customed_arxiv_search_tool, load_all_available_meta=True),
+        "检索": get_retrieval_tool
     }
-    tools_inst = [tools_mapping[tool['name']](**tool['kwargs']) for tool in tools]
+    tools_list = [tools_mapping[tool['name']](**tool['kwargs']) for tool in tools]
     # if get_global_value('tools_inst') is None or get_global_value('tools_inst')
     agent_mapping = {
-        "gpt-3.5-turbo": load_openai_agent 
+        "gpt-3.5-turbo": load_openai_agent(tools_inst=tools_list, temperature_parameter=temperature_4)
     }
-    agent = agent_mapping[model](tools_inst)
+    agent = agent_mapping[model](tools_list)
     set_global_value('agent', agent)
     agent_executor = AgentExecutor(agent=agent, tools=tools_inst, handle_parsing_errors=True)#type: ignore
     set_global_value('agent_executor', agent_executor)

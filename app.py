@@ -28,18 +28,19 @@ def _init_state_vars():
 def clear_cache():
     cache = load_cache()
     cache.clear_all()
-    gr.Info(f'All cached files are cleaned.')
+    gr.Info(f'所有缓存文件已被清除。')
     return []
 
-def add_input(user_input, chatbot, tools_ddl:list):
+def add_input(user_input, chatbot, tools_ddl:list, temperature_2:float):
     chatbot.append((user_input,None))
     return (                                                                                                                                                                                                        
             gr.Textbox(interactive = False, value = '', placeholder = ''), 
             chatbot, 
-            tools_ddl
+            tools_ddl,
+            temperature_2
             )
 
-def submit(chatbot, chat_history, tools_ddl:list, downloadChkValue:bool):
+def submit(chatbot, chat_history, tools_ddl:list, downloadChkValue:bool, temperature_3:float):
     user_input = chatbot[-1][0]
     chat_history.append(
         {
@@ -54,10 +55,10 @@ def submit(chatbot, chat_history, tools_ddl:list, downloadChkValue:bool):
             "name":tool,
             "kwargs": {}
         }
-        if tool=='websearch':
+        if tool=='联网搜索':
             config['kwargs']['download']=downloadChkValue
         tools.append(config)
-    for ai_response in call_agent(user_input, chat_history, model='gpt-3.5-turbo', tools=tools, stream=True):
+    for ai_response in call_agent(user_input, chat_history, model='gpt-3.5-turbo', tools=tools, stream=True, temperature_4=temperature_3):
         full_response += str(ai_response)    #type: ignore
         chatbot[-1] = (chatbot[-1][0], full_response)
         yield chatbot, chat_history, tools_ddl, downloadChkValue
@@ -73,7 +74,7 @@ def submit(chatbot, chat_history, tools_ddl:list, downloadChkValue:bool):
 def upload(file_obj):
     cache = load_cache()
     cache.cache_file(str(Path(file_obj.name)), save_local=True)
-    gr.Info('File {} uploaded successfully!'.format(os.path.basename(Path(file_obj.name))))
+    gr.Info('文件 {} 成功下载!'.format(os.path.basename(Path(file_obj.name))))
 
     return [[i] for i in cache.all_files]
 def confirmBtn_click():
@@ -129,62 +130,102 @@ def create_ui():
     with open('websocket.html',encoding='utf-8') as f:
         html = f.read()
     with gr.Blocks(title='SciAgent', theme='soft') as demo:
-        with gr.Tab(label='chat'):
+        with gr.Tab(label='聊天'):
             with gr.Row():
                 with gr.Column(scale=3):
                     chatbot = gr.Chatbot(label="SciAgent", height=900)
-                    txtbot = gr.Textbox(label="Your message:", placeholder="Input here", lines=4)
+                    txtbot = gr.Textbox(label="用户对话框:", placeholder="在这里输入", lines=4)
                     chat_history = gr.State([])
                 with gr.Column(scale=1):
                     with gr.Row():
                         toolsDdl = gr.Dropdown(
                             cast(list[str | int | float | tuple[str, str | int | float]] | None, TOOLS_LIST),  
                             multiselect=True, 
-                            label="Tools", 
-                            info="Select tools to use",
+                            label="工具", 
+                            info="选择要使用的工具",
                             interactive=True
                         )
                         
                     with gr.Row():
                         uploadFileBtn = gr.File(
-                            label="click to upload .pdf or .docx file", 
+                            label="点击以下载 .pdf 或者 .docx 文件", 
                             file_types=['.pdf','.docx']
                         )
                         
                     with gr.Row():
-                        cleanCacheBtn = gr.Button('Clear all cached files')
+                        cleanCacheBtn = gr.Button('清理所有缓存文件')
                     with gr.Row():
                         llmDdl = gr.Dropdown(
                             choices=['gpt-3.5-turbo','chatglm3'],
                             value=['gpt-3.5-turbo'],
-                            label="Model"
+                            label="模型"
                         )
-                    with gr.Accordion(label='websearch params', open=False):
+                    with gr.Accordion(label='联网搜索参数', open=False):
                         downloadChk = gr.Checkbox(
-                            label='download',
+                            label='下载',
                         )
+                    with gr.Accordion(label='参数控制', open=False):
+                        temperature_1 = gr.Slider(
+                            label="temperature",
+                            minimum=0.2,
+                            maximum=2.0,
+                            value=1,
+                            step=0.05,
+                            info="请在0.2至2.0之间选择",
+                            interactive=True
+                        )
+                        top_p = gr.Slider(
+                            label = "top_p",
+                            minimum=0.7,
+                            maximum=1.0,
+                            value=0.9,
+                            step=0.01,
+                            info="请在0.7至1.0之间选择",
+                            interactive=True
+                        )
+                        chunk_size = gr.Slider(
+                            label="切片长度",
+                            minimum=20,
+                            maximum=500,
+                            step=1,
+                            value = 100,
+                            info="选择每段被切割文案的长度",
+                            interactive=True
+                        )
+                        score_threshold = gr.Slider(
+                            label="分数阈值",
+                            minimum=20,
+                            maximum=500,
+                            step=1,
+                            value = 100,
+                            interactive=True
+                        )
+                   
                         
             with gr.Row():
-                clearBtn = gr.ClearButton([txtbot,chatbot,chat_history])
-                submitBtn = gr.Button("Submit")
+                clearBtn = gr.ClearButton(
+                    value = "清除",
+                    components = [txtbot,chatbot,chat_history]
+                    )
+                submitBtn = gr.Button("提交")
                 
-        with gr.Tab(label='Cached papers'):
+        with gr.Tab(label='缓存文章'):
             cache = load_cache()
             dstCachedPapers = gr.Dataset(
                 components=[gr.Textbox(visible=False)], 
-                label='Cached papers',
+                label='缓存文章',
                 samples=[[i] for i in cache.all_files]
             )
-        with gr.Tab(label='log'):
+        with gr.Tab(label='工作台'):
             pass
         # with gr.Column():
         #     state_txt_box = gr.Textbox()
-        timeStampDisp = gr.Textbox(label='time stamp', value=get_timestamp, every=1, visible=False)
+        timeStampDisp = gr.Textbox(label='时间戳', value=get_timestamp, every=1, visible=False)
         with Modal(visible=False) as modal:
             modalMsg = gr.Markdown()
             with gr.Row():
-                confirmBtn = gr.Button("Yes")
-                cancelBtn = gr.Button("No")
+                confirmBtn = gr.Button("是")
+                cancelBtn = gr.Button("否")
         confirmBtn.click(
             confirmBtn_click,
             inputs=None, 
@@ -217,17 +258,17 @@ def create_ui():
 
         submitBtn.click(
             fn = add_input, 
-            inputs = [txtbot, chatbot, toolsDdl], 
-            outputs = [txtbot, chatbot, toolsDdl]
+            inputs = [txtbot, chatbot, toolsDdl, temperature_1], 
+            outputs = [txtbot, chatbot, toolsDdl, temperature_1]
         ).then(
             fn = submit, 
-            inputs = [chatbot, chat_history, toolsDdl, downloadChk], 
-            outputs=[chatbot, chat_history, toolsDdl, downloadChk],
+            inputs = [chatbot, chat_history, toolsDdl, downloadChk, temperature_1], 
+            outputs=[chatbot, chat_history, toolsDdl, downloadChk, temperature_1],
             show_progress='hidden'
         ).then(
             fn = lambda: [[i] for i in cache.all_files], outputs=[dstCachedPapers]
         ).then(
-            fn = lambda : gr.Textbox(label="Your message:", interactive=True, placeholder="Input here"), inputs = None, outputs = [txtbot]
+            fn = lambda : gr.Textbox(label="用户对话框:", interactive=True, placeholder="在这里输入"), inputs = None, outputs = [txtbot]
         )
     return demo
 
