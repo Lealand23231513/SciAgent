@@ -22,6 +22,14 @@ ZH_EN_MAP = {
     '联网搜索': 'websearch',
     '检索增强搜索（RAG）': 'retrieval'
 }
+SUPPORT_LLMS = [
+    'gpt-3.5-turbo',
+    'chatglm3',
+    'glm-3-turbo',
+    'glm-4',
+    'gpt-3.5-turbo-0125',
+    'gpt-4'
+]
 
 logger = logging.getLogger(Path(__file__).stem)
 

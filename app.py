@@ -4,7 +4,7 @@ from controler import main_for_test,main, call_agent
 from pathlib import Path
 from dotenv import load_dotenv
 import os
-from utils import DEFAULT_CACHE_DIR, TOOLS_LIST, toolname_zh2en
+from utils import DEFAULT_CACHE_DIR, TOOLS_LIST, SUPPORT_LLMS, toolname_zh2en
 from gradio_modal import Modal
 from typing import cast
 import global_var
@@ -40,7 +40,14 @@ def add_input(user_input, chatbot):
             gr.Slider(interactive=False)
     )
 
-def submit(chatbot, chat_history, zhToolsDdl:list, downloadChkValue:bool, temperatureValue:float):
+def submit(
+        chatbot, 
+        chat_history, 
+        zhToolsDdl:list, 
+        downloadChkValue:bool, 
+        temperatureValue:float,
+        llmDdlValue:str
+    ):
     enToolsDdl = toolname_zh2en(zhToolsDdl)
     user_input = chatbot[-1][0]
     chat_history.append(
@@ -59,7 +66,7 @@ def submit(chatbot, chat_history, zhToolsDdl:list, downloadChkValue:bool, temper
         if tool=='websearch':
             config['kwargs']['download']=downloadChkValue
         tools.append(config)
-    for ai_response in call_agent(user_input, chat_history, model='gpt-3.5-turbo', tools_choice=tools, retrieval_temp=temperatureValue, stream=True):
+    for ai_response in call_agent(user_input, chat_history, model=llmDdlValue, tools_choice=tools, retrieval_temp=temperatureValue, stream=True):
         full_response += str(ai_response)    #type: ignore
         chatbot[-1] = (chatbot[-1][0], full_response)
         yield chatbot, chat_history
@@ -160,7 +167,7 @@ def create_ui():
                         cleanCacheBtn = gr.Button('清理所有缓存文件')
                     with gr.Row():
                         llmDdl = gr.Dropdown(
-                            choices=['gpt-3.5-turbo','chatglm3'],
+                            choices=cast(list[str | int | float | tuple[str, str | int | float]] | None, SUPPORT_LLMS),
                             value='gpt-3.5-turbo',
                             label="模型"
                         )
@@ -261,7 +268,7 @@ def create_ui():
             outputs = [txtbot, chatbot, zhToolsDdl, temperatureSlider]
         ).then(
             fn = submit, 
-            inputs = [chatbot, chat_history, zhToolsDdl, downloadChk, temperatureSlider], 
+            inputs = [chatbot, chat_history, zhToolsDdl, downloadChk, temperatureSlider, llmDdl], 
             outputs=[chatbot, chat_history],
             show_progress='hidden'
         ).then(
