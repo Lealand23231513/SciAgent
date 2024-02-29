@@ -17,10 +17,20 @@ from pathlib import Path
 
 from regex import P
 DEFAULT_CACHE_DIR = ".cache"
-TOOLS_LIST = ["websearch", "retrieve"]
-
+TOOLS_LIST = ['联网搜索', '检索增强搜索（RAG）']
+ZH_EN_MAP = {
+    '联网搜索': 'websearch',
+    '检索增强搜索（RAG）': 'retrieval'
+}
 
 logger = logging.getLogger(Path(__file__).stem)
+
+def toolname_zh2en(zhtools_lst:list[str]):
+    return [
+        ZH_EN_MAP[i]
+        for i in zhtools_lst
+    ]
+
 
 def chater(query:str, history, stream=False, api_key:str|None=None):
     messages = history + [{"role": "user", "content": f"{query}"}]
