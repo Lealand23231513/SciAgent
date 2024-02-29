@@ -19,16 +19,38 @@ from langchain.agents.format_scratchpad.openai_tools import (
 )
 from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
 from langchain_core.tools import tool
+from langchain_zhipu import ChatZhipuAI
 
 logger = logging.getLogger(Path(__file__).stem)
 
-def load_openai_agent_excutor(tools_inst:list[BaseTool]):
+def load_openai_agent_excutor(tools_inst:list[BaseTool], model='gpt-3.5-turbo'):
     @tool
     def notool():
         'use no tool'
-    llm = ChatOpenAI(model='gpt-3.5-turbo-0125', temperature=0, api_key=os.getenv('OPENAI_API_KEY'))
+    llm = ChatOpenAI(model=model, temperature=0, api_key=os.getenv('OPENAI_API_KEY'))
     if len(tools_inst)==0:
         llm_with_tools = llm.bind_tools([notool],tool_choice='none')
+    else:
+        llm_with_tools = llm.bind_tools(tools_inst,tool_choice='auto')
+    prompt = hub.pull("hwchase17/openai-tools-agent")
+    agent = (
+        {
+            "input": lambda x: x["input"],
+            "agent_scratchpad": lambda x: format_to_openai_tool_messages(
+                x["intermediate_steps"]
+            ),
+        }
+        | prompt
+        | llm_with_tools
+        | OpenAIToolsAgentOutputParser()
+    )
+    agent_executor = AgentExecutor(agent=agent, tools=tools_inst, handle_parsing_errors=True)#type: ignore
+    return agent_executor
+
+def load_zhipuai_agent_excutor(tools_inst:list[BaseTool], model='glm-3-turbo'):
+    llm = ChatZhipuAI(model=model, temperature=0.01, api_key=os.getenv('ZHIPUAI_API_KEY'))
+    if len(tools_inst)==0:
+        llm_with_tools = llm
     else:
         llm_with_tools = llm.bind_tools(tools_inst,tool_choice='auto')
     prompt = hub.pull("hwchase17/openai-tools-agent")
@@ -49,16 +71,20 @@ def load_openai_agent_excutor(tools_inst:list[BaseTool]):
 def call_agent(user_input:str, history:list[Mapping[str,str]], tools_choice:list, model:str, retrieval_temp:float, stream:bool = False):
     load_dotenv()
     
-    tools_mapping ={
+    tools_mapping = {
         "websearch": partial(get_customed_arxiv_search_tool, load_all_available_meta=True),
         "retrieval": get_retrieval_tool
     }
     tools_inst = [tools_mapping[tool['name']](**tool['kwargs']) for tool in tools_choice]
     # if get_global_value('tools_inst') is None or get_global_value('tools_inst')
     agent_excutor_mapping = {
-        "gpt-3.5-turbo": load_openai_agent_excutor
+        "openai": load_openai_agent_excutor,
+        "zhipuai": load_zhipuai_agent_excutor,
     }
-    agent_executor = agent_excutor_mapping[model](tools_inst)
+    if 'gpt' in model:
+        agent_executor = agent_excutor_mapping['openai'](tools_inst, model)
+    elif 'glm' in model:
+        agent_executor = agent_excutor_mapping['zhipuai'](tools_inst, model)
     set_global_value('agent_executor', agent_executor)
     ans = agent_executor.invoke(
         {
