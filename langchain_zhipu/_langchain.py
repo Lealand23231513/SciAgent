@@ -231,6 +231,7 @@ class ChatZhipuAI(BaseChatModel):
     """
     用于控制模型是如何选择要调用的函数，仅当工具类型为function时补充。默认为auto，当前仅支持auto。
     """
+    base_url: str | None = None
 
     @classmethod
     def valid_params(cls):
@@ -261,7 +262,7 @@ class ChatZhipuAI(BaseChatModel):
     def validate_environment(cls, values: Dict) -> Dict:
         try:
             if values["api_key"] is not None:
-                values["client"] =  ZhipuAI(api_key=values["api_key"])
+                values["client"] =  ZhipuAI(api_key=values["api_key"], base_url=values['base_url'])
             else:
                 values["client"] =  ZhipuAI()
         except ImportError:
