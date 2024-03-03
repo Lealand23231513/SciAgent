@@ -50,9 +50,8 @@ def load_openai_agent_excutor(tools_inst:list[BaseTool], model='gpt-3.5-turbo'):
 
 def load_zhipuai_agent_excutor(tools_inst:list[BaseTool], model='glm-3-turbo'):
     if model=='chatglm3-6b':
-        base_url = 'http://localhost:6006/v1/'
+        base_url = os.getenv('CHATGLM3_BASE_URL')
         api_key = "EMP.TY"
-        model = 'chatglm3-6b'
     else:
         base_url = os.getenv('ZHIPUAI_BASE_URL')
         api_key = os.getenv('ZHIPUAI_API_KEY')
