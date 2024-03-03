@@ -3,8 +3,7 @@ from matplotlib.mathtext import RasterParse
 from openai import OpenAI
 import json
 import os
-from langchain_core.prompts.chat import _convert_to_message
-from langchain_community.adapters.openai import convert_dict_to_message, convert_message_to_dict
+from langchain_community.adapters.openai import convert_dict_to_message
 from langchain.prompts.chat import (
     ChatPromptTemplate,
     SystemMessagePromptTemplate,

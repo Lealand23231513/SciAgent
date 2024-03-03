@@ -9,7 +9,7 @@ from pathlib import Path
 __file__='输入文件地址 如C:/example/example1.pdf'
 dir_ = Path(__file__).parent
 
-p = pipeline(
+p = pipeline(# 需要torch以及下载llm，在笔记本上跑不了，必须得租卡
     "document-question-answering",
     model="impira/layoutlm-document-qa",
 )

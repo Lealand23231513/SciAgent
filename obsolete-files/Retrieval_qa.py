@@ -3,6 +3,9 @@ from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
 import logging
 from pathlib import Path
+import os
+import openai
+from dotenv import load_dotenv
 from utils import fn_args_generator
 from typing import Callable, cast
 from cache import Cache
@@ -68,3 +71,24 @@ class RetrievalQueryRun(BaseTool):
         return self.retrieve_function(query)
 def get_retrieval_tool():
     return RetrievalQueryRun()
+
+
+
+def retrieval_auto_runner(user_input:str, functions, history = []) -> str:
+    function_args = fn_args_generator(user_input, functions, history)
+    logger.debug(f"funtion args:\n{function_args}")
+    path = function_args.get("path")
+    query = function_args.get("query")
+    result = retrieval(query, path)
+    return result
+    
+if __name__ == '__main__':
+    from dotenv import load_dotenv
+    
+    load_dotenv()
+    openai.api_key = os.getenv('OPENAI_API_KEY')
+    test_file = r"C:\Users\15135\Documents\DCDYY\SciAgent\.cache\cached-files\CLaMP.pdf"
+    test_url = "https://arxiv.org/pdf/1706.03762.pdf"
+    question = "Clamp"
+    communicate_result = retrieval(question, test_file)
+    print("paper: {}\nquestion: {}\nanswer: {}".format(Path(test_file),question,communicate_result))

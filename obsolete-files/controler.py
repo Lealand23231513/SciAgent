@@ -1,15 +1,19 @@
 # 核心控制模块
 from typing import Mapping
+import openai
 import os
+import json
 import logging
 from pathlib import Path
 from dotenv import load_dotenv
+from Retrieval_qa import retrieval_auto_runner
 from utils import *
 from langchain import hub
-from langchain_core.tools import BaseTool
+from arxiv_search import *
 from arxiv_search import get_customed_arxiv_search_tool
 from Retrieval_qa import get_retrieval_tool
-from global_var import set_global_value
+from global_var import get_global_value, set_global_value
+from langchain.agents import create_openai_tools_agent
 from langchain.agents.format_scratchpad.openai_tools import (
     format_to_openai_tool_messages,
 )
@@ -17,14 +21,16 @@ from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputP
 from langchain_core.tools import tool
 from langchain_zhipu import ChatZhipuAI
 from functools import partial
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 logger = logging.getLogger(Path(__file__).stem)
 
 def load_openai_agent_excutor(tools_inst:list[BaseTool], model='gpt-3.5-turbo'):
-    llm = ChatOpenAI(model=model, temperature=0, api_key=os.getenv('OPENAI_API_KEY'))# type:ignore
+    @tool
+    def notool():
+        'use no tool'
+    llm = ChatOpenAI(model=model, temperature=0, api_key=os.getenv('OPENAI_API_KEY'))
     if len(tools_inst)==0:
-        llm_with_tools = llm
+        llm_with_tools = llm.bind_tools([notool],tool_choice='none')
     else:
         llm_with_tools = llm.bind_tools(tools_inst,tool_choice='auto')
     prompt = hub.pull("hwchase17/openai-tools-agent")
@@ -54,16 +60,7 @@ def load_zhipuai_agent_excutor(tools_inst:list[BaseTool], model='glm-3-turbo'):
         llm_with_tools = llm
     else:
         llm_with_tools = llm.bind_tools(tools_inst,tool_choice='auto')
-    prompt = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            "You are a helpful assistant.",
-        ),
-        ("user", "{input}"),
-        MessagesPlaceholder(variable_name="agent_scratchpad"),
-    ]
-)
+    prompt = hub.pull("hwchase17/openai-tools-agent")
     agent = (
         {
             "input": lambda x: x["input"],
@@ -108,3 +105,58 @@ def call_agent(user_input:str, history:list[Mapping[str,str]], tools_choice:list
         yield from ans['output']
     else:
         return ans['output']
+
+def main(user_input:str, history, tools:list, stream:bool = False):
+    '''
+    deprecated
+    '''
+    # import env variables
+    load_dotenv()
+    openai.api_key = os.getenv('OPENAI_API_KEY')
+    
+    with open('modules.json', "r") as f:
+        module_descriptions = json.load(f)
+    module_descriptions = list(filter(lambda item: item['name'] in tools+['chatonly'], module_descriptions))
+    response = task_decider(user_input, module_descriptions)
+    exe_result = ""
+    papers_info = []
+    for task in response:
+        functions = next(filter(lambda item: item['name'] == task["name"] ,module_descriptions))['functions']
+        if task["name"] == "chatonly":
+            yield from chater(user_input, history, stream=stream)
+            continue
+        if task["name"] == "websearch":
+            if task["function"] == "arxiv_auto_search":
+                # try:
+                #     arxiv_results = arxiv_auto_search(task["todo"], functions, history)
+                #     for paper in arxiv_results:
+                #         paper["path"] = ""
+                #         papers_info.append(paper)
+                #     exe_result = result_parser(arxiv_results, task["name"], query=user_input, stream=stream)
+                # except ValueError as e:
+                #     err_msg = e.args[0]
+                #     exe_result = result_parser(err_msg, 'exception', query=user_input, stream=stream)
+                yield from arxiv_search_with_agent(user_input=user_input)
+        if task["name"] == 'retrieve':
+            retrieval_result = retrieval_auto_runner(task['todo']+f"\nuser's query:\n{user_input}", functions, history)
+            exe_result = retrieval_result
+        yield from exe_result
+
+
+
+
+def main_for_test(user_input:str):
+    '''
+    This is for test.
+    '''
+    yield "user_input:"
+    yield f"{user_input}"
+    yield "this"
+    yield "is"
+    yield "for"
+    yield "test"
+
+    #TODO: Contact controler to other modules.
+if __name__ == '__main__':
+    for chunk in main_for_test('TEST'):
+        print(chunk)
