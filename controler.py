@@ -20,6 +20,7 @@ from langchain.agents.format_scratchpad.openai_tools import (
 from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
 from langchain_core.tools import tool
 from langchain_zhipu import ChatZhipuAI
+from functools import partial
 
 logger = logging.getLogger(Path(__file__).stem)
 
