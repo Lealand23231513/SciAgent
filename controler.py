@@ -4,9 +4,10 @@ import os
 import logging
 from pathlib import Path
 from dotenv import load_dotenv
-from utils import *
+from langchain_community.adapters.openai import convert_dict_to_message
 from langchain import hub
 from langchain_core.tools import BaseTool
+from langchain_openai import ChatOpenAI
 from arxiv_search import get_customed_arxiv_search_tool
 from Retrieval_qa import get_retrieval_tool
 from global_var import set_global_value
@@ -14,7 +15,7 @@ from langchain.agents.format_scratchpad.openai_tools import (
     format_to_openai_tool_messages,
 )
 from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
-from langchain_core.tools import tool
+from langchain.agents import AgentExecutor
 from langchain_zhipu import ChatZhipuAI
 from functools import partial
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -39,7 +40,8 @@ def load_openai_agent_excutor(tools_inst:list[BaseTool], model='gpt-3.5-turbo'):
         | llm_with_tools
         | OpenAIToolsAgentOutputParser()
     )
-    agent_executor = AgentExecutor(agent=agent, tools=tools_inst, handle_parsing_errors=True)#type: ignore
+    agent_executor = AgentExecutor(agent=agent, #type: ignore
+                                   tools=tools_inst, handle_parsing_errors=True)
     return agent_executor
 
 def load_zhipuai_agent_excutor(tools_inst:list[BaseTool], model='glm-3-turbo'):
@@ -55,15 +57,15 @@ def load_zhipuai_agent_excutor(tools_inst:list[BaseTool], model='glm-3-turbo'):
     else:
         llm_with_tools = llm.bind_tools(tools_inst,tool_choice='auto')
     prompt = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            "You are a helpful assistant.",
-        ),
-        ("user", "{input}"),
-        MessagesPlaceholder(variable_name="agent_scratchpad"),
-    ]
-)
+        [
+            (
+                "system",
+                "You are a helpful assistant.",
+            ),
+            ("user", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
+        ]
+    )
     agent = (
         {
             "input": lambda x: x["input"],
@@ -75,7 +77,8 @@ def load_zhipuai_agent_excutor(tools_inst:list[BaseTool], model='glm-3-turbo'):
         | llm_with_tools
         | OpenAIToolsAgentOutputParser()
     )
-    agent_executor = AgentExecutor(agent=agent, tools=tools_inst, handle_parsing_errors=True)#type: ignore
+    agent_executor = AgentExecutor(agent=agent, #type: ignore
+                                   tools=tools_inst, handle_parsing_errors=True)
     return agent_executor
 
 def call_agent(user_input:str, history:list[Mapping[str,str]], tools_choice:list, model:str, retrieval_temp:float, stream:bool = False):
@@ -86,7 +89,6 @@ def call_agent(user_input:str, history:list[Mapping[str,str]], tools_choice:list
         "retrieval": get_retrieval_tool
     }
     tools_inst = [tools_mapping[tool['name']](**tool['kwargs']) for tool in tools_choice]
-    # if get_global_value('tools_inst') is None or get_global_value('tools_inst')
     agent_excutor_mapping = {
         "openai": load_openai_agent_excutor,
         "zhipuai": load_zhipuai_agent_excutor,

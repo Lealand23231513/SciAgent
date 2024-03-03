@@ -1,6 +1,6 @@
 import gradio as gr
 import logging
-from controler import main_for_test,main, call_agent
+from controler import call_agent
 from pathlib import Path
 from dotenv import load_dotenv
 import os
