@@ -37,13 +37,13 @@ def retrieval(query:str, path:str|None=None) -> str:
     logger.info('retrieval start')
     cache = Cache()
     if path:
-        cache.cache_file(path)
+        cache.cache_file(path)# TODO: check uncached files
     prompt = PromptTemplate(
         template=prompt_template,
         input_variables=["context", "question"]
     )
     chain_type_kwargs = {"prompt": prompt}
-    qa_chain = RetrievalQA.from_chain_type(llm=ChatOpenAI(model='gpt-3.5-turbo-0125'), chain_type="stuff",
+    qa_chain = RetrievalQA.from_chain_type(llm=ChatOpenAI(model='gpt-3.5-turbo-0125'), chain_type="stuff",# TODO: temperature, llm(changable)
                                      retriever=cache.vectorstore.as_retriever(),
                                      chain_type_kwargs=chain_type_kwargs,
                                      return_source_documents=True)

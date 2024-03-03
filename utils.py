@@ -24,7 +24,7 @@ ZH_EN_MAP = {
 }
 SUPPORT_LLMS = [
     'gpt-3.5-turbo',
-    'chatglm3',
+    'chatglm3-6b',
     'glm-3-turbo',
     'glm-4',
     'gpt-3.5-turbo-0125',

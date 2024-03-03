@@ -20,6 +20,7 @@ from langchain.agents.format_scratchpad.openai_tools import (
 from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
 from langchain_core.tools import tool
 from langchain_zhipu import ChatZhipuAI
+from functools import partial
 
 logger = logging.getLogger(Path(__file__).stem)
 
@@ -48,7 +49,13 @@ def load_openai_agent_excutor(tools_inst:list[BaseTool], model='gpt-3.5-turbo'):
     return agent_executor
 
 def load_zhipuai_agent_excutor(tools_inst:list[BaseTool], model='glm-3-turbo'):
-    llm = ChatZhipuAI(model=model, temperature=0.01, api_key=os.getenv('ZHIPUAI_API_KEY'))
+    if model=='chatglm3-6b':
+        base_url = os.getenv('CHATGLM3_BASE_URL')
+        api_key = "EMP.TY"
+    else:
+        base_url = os.getenv('ZHIPUAI_BASE_URL')
+        api_key = os.getenv('ZHIPUAI_API_KEY')
+    llm = ChatZhipuAI(model=model, temperature=0.01, api_key=api_key, base_url=base_url)
     if len(tools_inst)==0:
         llm_with_tools = llm
     else:
