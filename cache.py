@@ -15,7 +15,16 @@ from typing import cast
 from global_var import get_global_value, set_global_value
 from utils import DEFAULT_CACHE_DIR
 from typing import cast
-
+EMB_MODEL_MAP={
+    "text-embedding-ada-002":{
+        "api_key": None,
+        "base_url": None,
+    },
+    "bge-m3":{
+        "api_key": "EMPTY",
+        "base_url": "http://10.134.40.123:6006/v1/"
+    }
+}
 def load_cache():
     cache = cast(Cache, get_global_value('cache'))
     if cache is None:
@@ -24,14 +33,21 @@ def load_cache():
     return cache
 
 class Cache(object):
-    def __init__(self, all_files=None, vectorstore=None, record_manager=None) -> None:
-        self.filenames_save_path = Path(DEFAULT_CACHE_DIR)/'cached-files.json'
-        # if self.filenames_save_path.exists() == False:
+    def __init__(self, emb_model_name:str = "text-embedding-ada-002", all_files=None, vectorstore=None, record_manager=None) -> None:
+        self.emb_model_name = emb_model_name
+        self.root_dir = Path(DEFAULT_CACHE_DIR)/emb_model_name
+        if self.root_dir.exists() == False:
+            self.root_dir.mkdir()
+        self.filenames_save_path = self.root_dir/'cached-files.json'
         self.filenames_save_path.touch()
-        self.cached_files_dir = Path(DEFAULT_CACHE_DIR)/'cached-files'
+        self.cached_files_dir = self.root_dir/'cached-files'
         if self.cached_files_dir.exists()==False:
             self.cached_files_dir.mkdir()
-        self.embedding = OpenAIEmbeddings()
+        self.embedding = OpenAIEmbeddings(
+            model = emb_model_name,
+            api_key=EMB_MODEL_MAP[emb_model_name]['api_key'],
+            base_url=EMB_MODEL_MAP[emb_model_name]['base_url']
+        )
         #TODO: customed embedding
         if all_files is None:
             self.load_filenames()
@@ -47,27 +63,26 @@ class Cache(object):
             self.record_manager = record_manager
     def load_filenames(self):
         # load cached files' name
-        save_path = Path(DEFAULT_CACHE_DIR+'/cached-files.json')
         try:
-            with open(save_path) as f:
+            with open(self.filenames_save_path) as f:
                 self.all_files = cast(list[str], json.load(f))
         except Exception as e:
             logger = logging.getLogger(Path(__file__).stem)
-            logger.info(e)
+            logger.error(e)
             self.all_files = []
         return self.all_files
     def load_record_manager(self):
         # load SQL record manager
         self.record_manager = SQLRecordManager(
-            'chroma/sciagent', db_url="sqlite:///"+DEFAULT_CACHE_DIR+"/record_manager_cache.sql"
+            'chroma/'+self.emb_model_name, db_url="sqlite:///"+f"{DEFAULT_CACHE_DIR}/{self.emb_model_name}/record_manager_cache.sql"
         )
         self.record_manager.create_schema()
         return self.record_manager
     def load_vectorstore(self):
         # load Chroma vecotrstore with OpenAI embeddings
-        persist_directory = DEFAULT_CACHE_DIR+'/chroma'
+        persist_directory = str(self.root_dir/'chroma')
         self.vectorstore = Chroma(
-            collection_name='sciagent', embedding_function=self.embedding, persist_directory=persist_directory
+            collection_name=self.emb_model_name, embedding_function=self.embedding, persist_directory=persist_directory
         )
         return self.vectorstore
     def save_filenames(self):
@@ -79,12 +94,13 @@ class Cache(object):
         #TODO clear cached files
         self.all_files = []
         self.save_filenames()
-        cached_files_path = Path(DEFAULT_CACHE_DIR)/'cached-files'
-        for file in cached_files_path.iterdir():
+        for file in self.cached_files_dir.iterdir():
             file.unlink()
         logger = logging.getLogger(Path(__file__).stem)
         logger.info(f'All files in directory {DEFAULT_CACHE_DIR} are cleaned.')
-        return index([], self.record_manager, self.vectorstore, cleanup="full", source_id_key="source")
+        res = index([], self.record_manager, self.vectorstore, cleanup="full", source_id_key="source")
+        logger.info(res)
+        return res
     def cache_file(self, path:str, save_local=False, chunk_size=1000, chunk_overlap=200, add_start_index=True):
         '''
         :param path: path or url of the file

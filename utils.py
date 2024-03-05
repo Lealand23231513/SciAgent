@@ -29,6 +29,10 @@ SUPPORT_LLMS = [
     'gpt-3.5-turbo-0125',
     'gpt-4'
 ]
+SUPPORT_EMBS = [
+    "text-embedding-ada-002",
+    'bge-m3'
+]
 
 logger = logging.getLogger(Path(__file__).stem)
 

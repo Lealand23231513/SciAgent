@@ -4,7 +4,7 @@ from controler import call_agent
 from pathlib import Path
 from dotenv import load_dotenv
 import os
-from utils import DEFAULT_CACHE_DIR, TOOLS_LIST, SUPPORT_LLMS, toolname_zh2en
+from utils import DEFAULT_CACHE_DIR, TOOLS_LIST, SUPPORT_LLMS, SUPPORT_EMBS, toolname_zh2en
 from gradio_modal import Modal
 from typing import cast
 import global_var
@@ -82,7 +82,7 @@ def submit(
 def upload(file_obj):
     cache = load_cache()
     cache.cache_file(str(Path(file_obj.name)), save_local=True)
-    gr.Info('文件 {} 成功下载!'.format(os.path.basename(Path(file_obj.name))))
+    gr.Info('文件 {} 上传成功!'.format(os.path.basename(Path(file_obj.name))))
 
     return [[i] for i in cache.all_files]
 def confirmBtn_click():
@@ -169,8 +169,13 @@ def create_ui():
                         llmDdl = gr.Dropdown(
                             choices=cast(list[str | int | float | tuple[str, str | int | float]] | None, SUPPORT_LLMS),
                             value='gpt-3.5-turbo',
-                            label="模型"
+                            label="大语言模型"
                         )
+                        # embDdl = gr.Dropdown(
+                        #     choices=cast(list[str | int | float | tuple[str, str | int | float]] | None, SUPPORT_EMBS),
+                        #     value="text-embedding-ada-002",
+                        #     label="Embedding模型"
+                        # )
                     with gr.Accordion(label='联网搜索设置', open=False):
                         downloadChk = gr.Checkbox(
                             label='下载',
