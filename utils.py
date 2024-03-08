@@ -31,7 +31,10 @@ SUPPORT_LLMS = [
     'qwen1.5-4b-chat',
     'qwen1.5-7b-chat',
 ]
-
+SUPPORT_EMBS = [
+    "text-embedding-ada-002",
+    'bge-m3'
+]
 logger = logging.getLogger(Path(__file__).stem)
 
 def toolname_zh2en(zhtools_lst:list[str]):
