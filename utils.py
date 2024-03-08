@@ -1,5 +1,4 @@
 from langchain_openai import ChatOpenAI
-from matplotlib.mathtext import RasterParse
 from openai import OpenAI
 import json
 import os
@@ -13,6 +12,37 @@ from langchain.schema import BaseOutputParser
 from langchain.chains import LLMChain
 import logging
 from pathlib import Path
+from pydantic.v1.config import Extra
+import os
+import logging
+from pathlib import Path
+from dotenv import load_dotenv
+from langchain_community.adapters.openai import convert_dict_to_message
+from langchain_core.tools import BaseTool
+from langchain_openai import ChatOpenAI
+from langchain.agents.format_scratchpad.openai_tools import (
+    format_to_openai_tool_messages,
+)
+from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
+from langchain.agents import AgentExecutor
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+import json
+import logging
+from pathlib import Path
+from typing import (
+    Any,
+    List,
+    Tuple,
+    Union,
+)
+from langchain_core.agents import AgentAction, AgentFinish
+from langchain_core.callbacks import (
+    Callbacks,
+)
+from langchain_core.output_parsers import BaseOutputParser
+from langchain_core.tools import BaseTool
+from langchain.chains.llm import LLMChain
+from types import MethodType
 DEFAULT_CACHE_DIR = ".cache"
 TOOLS_LIST = ['联网搜索', '检索增强搜索（RAG）']
 ZH_EN_MAP = {
@@ -47,7 +77,7 @@ def toolname_zh2en(zhtools_lst:list[str]):
 def chater(query:str, history, stream=False, api_key:str|None=None):
     messages = history + [{"role": "user", "content": f"{query}"}]
     messages = [convert_dict_to_message(m) for m in messages]
-    llm = ChatOpenAI(model='gpt-3.5-turbo-0125',streaming=stream, api_key=api_key)
+    llm = ChatOpenAI(model='gpt-3.5-turbo-0125',streaming=stream, api_key=api_key)#type: ignore
     for chunk in llm.stream(messages):
         yield chunk.content
 
@@ -124,7 +154,7 @@ def result_parser(raw_exe_result, exe_module:str, query:str|None=None, stream=Fa
         ]
     
     messages = [convert_dict_to_message(m) for m in messages]
-    llm = ChatOpenAI(model='gpt-3.5-turbo-0125',streaming=stream, api_key=api_key)
+    llm = ChatOpenAI(model='gpt-3.5-turbo-0125',streaming=stream, api_key=api_key)#type: ignore
     for chunk in llm.stream(messages):
         yield chunk.content
 
@@ -192,6 +222,64 @@ keyword1,keyword2,...
     else:
         raise Exception('response.choices[0].message.content is None')
     return keywords
+
+def load_qwen_agent_executor(tools_inst:list[BaseTool], model:str):
+    llm = ChatOpenAI(model=model, temperature=0, api_key="EMPTY", base_url="http://127.0.0.1:5000/v1")#type:ignore
+    if len(tools_inst)==0:
+        llm_with_tools = llm
+    else:
+        llm_with_tools = llm.bind_tools(tools_inst,tool_choice='auto')
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "You are a helpful assistant.",
+            ),
+            ("user", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
+        ]
+    )
+    agent = (
+        {
+            "input": lambda x: x["input"],
+            "agent_scratchpad": lambda x: format_to_openai_tool_messages(
+                x["intermediate_steps"]
+            ),
+        }
+        | prompt
+        | llm_with_tools
+        | OpenAIToolsAgentOutputParser()
+    )
+    def plan(
+        self,
+        intermediate_steps: List[Tuple[AgentAction, str]],
+        callbacks: Callbacks = None,
+        **kwargs: Any,
+    ) -> Union[
+        List[AgentAction],
+        AgentFinish,
+    ]:
+        """Based on past history and current inputs, decide what to do.
+
+        Args:
+            intermediate_steps: Steps the LLM has taken to date,
+                along with the observations.
+            callbacks: Callbacks to run.
+            **kwargs: User inputs.
+
+        Returns:
+            Action specifying what tool to use.
+        """
+        inputs = {**kwargs, **{"intermediate_steps": intermediate_steps}}
+        return self.runnable.invoke(inputs, config={"callbacks": callbacks})
+    
+    agent_executor = AgentExecutor(agent=agent, #type: ignore
+                                   tools=tools_inst, handle_parsing_errors=True)
+    
+    agent_executor.agent.__config__.extra=Extra.allow
+    agent_executor.agent.plan=MethodType(plan, agent_executor.agent)
+    return agent_executor
+
 
 if __name__ == '__main__':
     from dotenv import load_dotenv
