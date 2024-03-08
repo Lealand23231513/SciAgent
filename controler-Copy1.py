@@ -19,9 +19,6 @@ from langchain.agents import AgentExecutor
 from langchain_zhipu import ChatZhipuAI
 from functools import partial
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.llms import Xinference
-
-from qwenllm import qwen_generate
 
 logger = logging.getLogger(Path(__file__).stem)
 
@@ -84,54 +81,6 @@ def load_zhipuai_agent_excutor(tools_inst:list[BaseTool], model='glm-3-turbo'):
                                    tools=tools_inst, handle_parsing_errors=True)
     return agent_executor
 
-def load_qwen_agent_executor(tools_inst:list[BaseTool], model:str):
-    base_url = os.getenv('XINFERENCE_ENDPOINT')
-  
-    client = openai.Client(
-        api_key="EMPTY",
-        base_url=base_url,
-    )
-    model_uid = qwen_generate(base_url, model)
-    client.chat.completions.create(
-        model=model_uid,
-        messages=[
-            {"role": "user",
-            "content": "{input}"},
-            {"role": "system",
-            "content": "You are a helpful assistant."}
-        ],
-        tools=tools_inst,
-    )
-    llm = Xinference(model_uid=model_uid, server_url=base_url)
-    if len(tools_inst)==0:
-        llm_with_tools = llm
-    else:
-        llm_with_tools = llm.bind_tools(tools_inst,tool_choice='auto')
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                "You are a helpful assistant.",
-            ),
-            ("user", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ]
-    )
-    agent = (
-        {
-            "input": lambda x: x["input"],
-            "agent_scratchpad": lambda x: format_to_openai_tool_messages(
-                x["intermediate_steps"]
-            ),
-        }
-        | prompt
-        | llm_with_tools
-        | OpenAIToolsAgentOutputParser()
-    )
-    agent_executor = AgentExecutor(agent=agent, #type: ignore
-                                   tools=tools_inst, handle_parsing_errors=True)
-    return agent_executor
-
 def call_agent(user_input:str, history:list[Mapping[str,str]], tools_choice:list, model:str, retrieval_temp:float, stream:bool = False):
     load_dotenv()
     
@@ -143,14 +92,11 @@ def call_agent(user_input:str, history:list[Mapping[str,str]], tools_choice:list
     agent_excutor_mapping = {
         "openai": load_openai_agent_excutor,
         "zhipuai": load_zhipuai_agent_excutor,
-        "qwen": load_qwen_agent_executor,
     }
     if 'gpt' in model:
         agent_executor = agent_excutor_mapping['openai'](tools_inst, model)
     elif 'glm' in model:
         agent_executor = agent_excutor_mapping['zhipuai'](tools_inst, model)
-    elif 'qwen' in model:
-        agent_executor = agent_excutor_mapping['qwen'](tools_inst, model)
     set_global_value('agent_executor', agent_executor)
     ans = agent_executor.invoke(
         {

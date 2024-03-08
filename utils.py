@@ -13,8 +13,6 @@ from langchain.schema import BaseOutputParser
 from langchain.chains import LLMChain
 import logging
 from pathlib import Path
-
-from regex import P
 DEFAULT_CACHE_DIR = ".cache"
 TOOLS_LIST = ['联网搜索', '检索增强搜索（RAG）']
 ZH_EN_MAP = {
@@ -28,10 +26,10 @@ SUPPORT_LLMS = [
     'glm-4',
     'gpt-3.5-turbo-0125',
     'gpt-4',
-    'qwen1.5-0.5b',
-    'qwen1.5-1.8b',
-    'qwen1.5-4b',
-    'qwen1.5-7b',
+    'qwen1.5-0.5b-chat',
+    'qwen1.5-1.8b-chat',
+    'qwen1.5-4b-chat',
+    'qwen1.5-7b-chat',
 ]
 
 logger = logging.getLogger(Path(__file__).stem)
