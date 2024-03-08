@@ -27,11 +27,11 @@ SUPPORT_LLMS = [
     'glm-3-turbo',
     'glm-4',
     'gpt-3.5-turbo-0125',
-    'gpt-4'
-]
-SUPPORT_EMBS = [
-    "text-embedding-ada-002",
-    'bge-m3'
+    'gpt-4',
+    'qwen1.5-0.5b',
+    'qwen1.5-1.8b',
+    'qwen1.5-4b',
+    'qwen1.5-7b',
 ]
 
 logger = logging.getLogger(Path(__file__).stem)
