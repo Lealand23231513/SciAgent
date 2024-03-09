@@ -26,3 +26,5 @@ transformers==4.38.1
 typing_extensions==4.10.0
 websockets==10.4
 zhipuai==2.0.1
+chromadb
+pypdf
