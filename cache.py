@@ -17,7 +17,7 @@ EMB_MODEL_MAP = {
         "api_key": None,
         "base_url": None,
     },
-    "bge-m3": {"api_key": "EMPTY", "base_url": "http://10.134.40.123:6006/v1/"},
+    "bge-m3": {"api_key": "EMPTY", "base_url": "http://localhost:6006/v1/"},
 }
 
 
@@ -32,7 +32,7 @@ def load_cache():
 class Cache(object):
     def __init__(
         self,
-        emb_model_name: str = "text-embedding-ada-002",
+        emb_model_name: str = "bge-m3",
         all_files: Optional[List[str]] = None,
         vectorstore=None,
         record_manager=None,
