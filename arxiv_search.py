@@ -5,7 +5,7 @@ from pathlib import Path
 import multiprocessing
 from cache import load_cache
 logger = logging.getLogger(Path(__file__).stem)
-from utils import DEFAULT_CACHE_DIR
+from config import DEFAULT_CACHE_DIR
 from langchain import hub
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain_openai import ChatOpenAI
@@ -30,17 +30,10 @@ class CustomedArxivAPIWrapper(ArxivAPIWrapper):
             self.download = True
     def run(self, query: str) -> str:
         """
-        Performs an arxiv search and A single string
-        with the publish date, title, authors, and summary
-        for each article separated by two newlines.
-
-        If an error occurs or no documents found, error text
-        is returned instead. Wrapper for
-        https://lukasschwab.me/arxiv.py/index.html#Search
-
+        We overwrite ArxivAPIWrapper.run() to fit into our framework
         Args:
             query: a plaintext search query
-        """  # noqa: E501
+        """ 
         logger = logging.getLogger('.'.join((Path(__file__).stem, self.__class__.__name__)))
         def download_callback(written_path):
             cache = load_cache()

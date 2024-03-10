@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from utils import fn_args_generator
 from typing import Callable, cast
-from cache import Cache
+from cache import Cache, load_cache
 from typing import Optional, Type
 
 from langchain_core.callbacks import CallbackManagerForToolRun
@@ -32,7 +32,7 @@ def retrieval(query:str, path:str|None=None) -> str:
     '''
     logger = logging.getLogger('.'.join([Path(__file__).stem, _getframe().f_code.co_name]))
     logger.info('retrieval start')
-    cache = Cache()
+    cache = load_cache()
     if path:
         cache.cache_file(path)# TODO: check uncached files
     prompt = PromptTemplate(

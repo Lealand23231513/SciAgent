@@ -13,7 +13,7 @@ import json
 from langchain.indexes import SQLRecordManager, index
 from typing import cast
 from global_var import get_global_value, set_global_value
-from utils import DEFAULT_CACHE_DIR
+from config import DEFAULT_CACHE_DIR
 from typing import cast
 
 def load_cache():

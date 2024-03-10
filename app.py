@@ -4,11 +4,11 @@ from controler import call_agent
 from pathlib import Path
 from dotenv import load_dotenv
 import os
-from utils import DEFAULT_CACHE_DIR, TOOLS_LIST, SUPPORT_LLMS, SUPPORT_EMBS, toolname_zh2en
+from config import DEFAULT_CACHE_DIR, TOOLS_LIST, SUPPORT_LLMS, SUPPORT_EMBS
 from gradio_modal import Modal
 from typing import cast
 import global_var
-from cache import load_cache
+from cache import init_cache, load_cache
 from channel import load_channel
 import json
 import time
@@ -40,15 +40,20 @@ def add_input(user_input, chatbot):
             gr.Slider(interactive=False)
     )
 
+def change_cache_config(emb_model:str, namespace:str):
+    cache = init_cache(namespace=namespace, emb_model_name=emb_model)
+    gr.Info("成功更改缓存设置")
+    return [[i] for i in cache.all_files]
+
+
 def submit(
         chatbot, 
         chat_history, 
-        zhToolsDdl:list, 
+        toolsDdl:list, 
         downloadChkValue:bool, 
         temperatureValue:float,
         llmDdlValue:str
     ):
-    enToolsDdl = toolname_zh2en(zhToolsDdl)
     user_input = chatbot[-1][0]
     chat_history.append(
         {
@@ -58,7 +63,7 @@ def submit(
     )
     full_response = ""
     tools = []
-    for tool in enToolsDdl:
+    for tool in toolsDdl:
         config = {
             "name":tool,
             "kwargs": {}
@@ -143,9 +148,9 @@ def create_ui():
                     chat_history = gr.State([])
                     with gr.Row():
                         clearBtn = gr.ClearButton(
-                            value = "清除",
+                            value = "清除对话记录",
                             components = [txtbot,chatbot,chat_history]
-                            )
+                        )
                         submitBtn = gr.Button("提交")
                 with gr.Column(scale=1):
                     with gr.Row():
@@ -159,7 +164,7 @@ def create_ui():
                         
                     with gr.Row():
                         uploadFileBtn = gr.File(
-                            label="点击以下载 .pdf 或者 .docx 文件", 
+                            label="上传文件", 
                             file_types=['.pdf','.docx']
                         )
                         
@@ -171,16 +176,24 @@ def create_ui():
                             value='gpt-3.5-turbo',
                             label="大语言模型"
                         )
-                        # embDdl = gr.Dropdown(
-                        #     choices=cast(list[str | int | float | tuple[str, str | int | float]] | None, SUPPORT_EMBS),
-                        #     value="text-embedding-ada-002",
-                        #     label="Embedding模型"
-                        # )
-                    with gr.Accordion(label='联网搜索设置', open=False):
+                    with gr.Accordion(label='缓存设置'):
+                        namespaceTxt = gr.Textbox(
+                            value="default",
+                            label="数据库名称"
+                        )
+                        embDdl = gr.Dropdown(
+                            choices=cast(list[str | int | float | tuple[str, str | int | float]] | None, SUPPORT_EMBS),
+                            value="text-embedding-ada-002",
+                            label="Embedding模型"
+                        )
+                        changeCacheBtn = gr.Button(
+                            value="切换本地数据库设置"
+                        )
+                    with gr.Accordion(label='搜索设置', open=False):
                         downloadChk = gr.Checkbox(
                             label='下载',
                         )
-                    with gr.Accordion(label='检索增强搜索（RAG）设置', open=False):
+                    with gr.Accordion(label='RAG设置', open=False):
                         temperatureSlider = gr.Slider(
                             label="temperature",
                             minimum=0.2,
@@ -260,7 +273,11 @@ def create_ui():
             outputs=[dstCachedPapers],
             queue=True
         )
-        
+        changeCacheBtn.click(
+            change_cache_config,
+            inputs=[embDdl,namespaceTxt],
+            outputs=[dstCachedPapers]
+        )
         cleanCacheBtn.click(
             clear_cache,
             inputs=[],
@@ -297,14 +314,14 @@ def create_ui():
 if __name__ == '__main__':
     load_dotenv()
     global_var._init()
-    if os.path.exists(Path(DEFAULT_CACHE_DIR)) == False:
-        os.mkdir(Path(DEFAULT_CACHE_DIR))
+    if Path(DEFAULT_CACHE_DIR).exists() == False:
+        Path(DEFAULT_CACHE_DIR).mkdir(parents=True)
     logging.basicConfig(level = logging.INFO, format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(Path(__file__).stem)
     logger.info(f'gradio version: {gr.__version__}')
     # server = load_ws_server()
     channel = load_channel()
-    cache = load_cache()
+    cache = init_cache()
     _init_state_vars()
     demo = create_ui()
     logger.info('SciAgent start!')

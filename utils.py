@@ -43,35 +43,8 @@ from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.tools import BaseTool
 from langchain.chains.llm import LLMChain
 from types import MethodType
-DEFAULT_CACHE_DIR = ".cache"
-TOOLS_LIST = ['联网搜索', '检索增强搜索（RAG）']
-ZH_EN_MAP = {
-    '联网搜索': 'websearch',
-    '检索增强搜索（RAG）': 'retrieval'
-}
-SUPPORT_LLMS = [
-    'gpt-3.5-turbo',
-    'chatglm3-6b',
-    'glm-3-turbo',
-    'glm-4',
-    'gpt-3.5-turbo-0125',
-    'gpt-4',
-    'qwen1.5-0.5b-chat',
-    'qwen1.5-1.8b-chat',
-    'qwen1.5-4b-chat',
-    'qwen1.5-7b-chat',
-]
-SUPPORT_EMBS = [
-    "text-embedding-ada-002",
-    'bge-m3'
-]
 logger = logging.getLogger(Path(__file__).stem)
 
-def toolname_zh2en(zhtools_lst:list[str]):
-    return [
-        ZH_EN_MAP[i]
-        for i in zhtools_lst
-    ]
 
 
 def chater(query:str, history, stream=False, api_key:str|None=None):

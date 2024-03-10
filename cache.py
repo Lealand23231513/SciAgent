@@ -7,45 +7,80 @@ from pathlib import Path
 import shutil
 import json
 from langchain.indexes import SQLRecordManager, index
-from typing import cast
+from typing import Any, Literal, cast
 from global_var import get_global_value, set_global_value
-from utils import DEFAULT_CACHE_DIR
+from config import DEFAULT_CACHE_DIR, EMB_MODEL_MAP, DEFAULT_CACHE_NAMESPACE, DEFAULT_EMB_MODEL_NAME
 from typing import cast, List, Optional
+import logging
 
-EMB_MODEL_MAP = {
-    "text-embedding-ada-002": {
-        "api_key": None,
-        "base_url": None,
-    },
-    "bge-m3": {"api_key": "EMPTY", "base_url": "http://10.134.40.123:6006/v1/"},
-}
+def init_cache(clear_old:bool=False,**kwargs):
+    '''
+    :param clear_old: if True, will delete old cache if last run cache config is different from given kwargs
+    :param kwargs: kwargs of Cache
+    '''
+    logger = logging.getLogger(Path(__file__).stem+'init_cache')
+    default_cache_dir = Path(DEFAULT_CACHE_DIR)
+    last_run_cache_config_path = default_cache_dir / "lastrun-settings.json"
+    if default_cache_dir.exists() == False:
+        default_cache_dir.mkdir(parents=True)
+    if last_run_cache_config_path.exists():
+        with open(last_run_cache_config_path) as f:
+            last_run_cache_config = cast(dict[str, Any], json.load(f))
+        if last_run_cache_config!=kwargs:
+            if clear_old:
+                logger.info(f'last run cache config {last_run_cache_config} is different from given kwargs, so clear last run cache and build a new cache')
+                cache=Cache(**last_run_cache_config)
+                cache.clear_all()
+            last_run_cache_config.update(kwargs)
+            with open(last_run_cache_config_path, "w") as f:
+                json.dump(last_run_cache_config, f)
+        cache = Cache(**last_run_cache_config)
+    else:
+        logger.info("Can't find last run config, will create a config file")
+        last_run_cache_config_path.touch()
+        cache = Cache(**kwargs)
+        last_run_cache_config = {
+            "namespace": cache.namespace,
+            "emb_model_name": cache.emb_model_name,
+        }
+        with open(last_run_cache_config_path, "w") as f:
+            json.dump(last_run_cache_config, f)
+    set_global_value('cache', cache)
+    return cache
 
 
 def load_cache():
-    cache = cast(Cache, get_global_value("cache"))
-    if cache is None:
-        cache = Cache()
-        set_global_value("cache", cache)
+    try:
+        cache = cast(Cache, get_global_value("cache"))
+    except Exception as e:
+        logger = logging.getLogger(Path(__file__).stem)
+        logger.error(repr(e))
+        raise e
     return cache
 
 
 class Cache(object):
     def __init__(
         self,
-        emb_model_name: str = "text-embedding-ada-002",
+        namespace: str = DEFAULT_CACHE_NAMESPACE,
+        emb_model_name: str = DEFAULT_EMB_MODEL_NAME,
         all_files: Optional[List[str]] = None,
         vectorstore=None,
         record_manager=None,
     ) -> None:
         self.emb_model_name = emb_model_name
-        self.root_dir = Path(DEFAULT_CACHE_DIR) / emb_model_name
+        self.namespace = namespace
+        self.root_dir = Path(DEFAULT_CACHE_DIR) / namespace / emb_model_name
         if self.root_dir.exists() == False:
-            self.root_dir.mkdir()
+            self.root_dir.mkdir(parents=True)
         self.filenames_save_path = self.root_dir / "cached-files.json"
-        self.filenames_save_path.touch()
+        if self.filenames_save_path.exists() == False:
+            self.filenames_save_path.touch()
+            with open(self.filenames_save_path,'w') as f:
+                json.dump([],f)
         self.cached_files_dir = self.root_dir / "cached-files"
         if self.cached_files_dir.exists() == False:
-            self.cached_files_dir.mkdir()
+            self.cached_files_dir.mkdir(parents=True)
         self.embedding = OpenAIEmbeddings(
             model=emb_model_name,
             api_key=EMB_MODEL_MAP[emb_model_name]["api_key"],
@@ -71,17 +106,17 @@ class Cache(object):
             with open(self.filenames_save_path) as f:
                 self.all_files = cast(list[str], json.load(f))
         except Exception as e:
-            logger = logging.getLogger(Path(__file__).stem)
-            logger.error(e)
+            logger = logging.getLogger(Path(__file__).stem+'.load_filenames')
+            logger.info(repr(e))
             self.all_files = []
         return self.all_files
 
     def load_record_manager(self):
         # load SQL record manager
         self.record_manager = SQLRecordManager(
-            "chroma/" + self.emb_model_name,
+            self.namespace + self.emb_model_name,
             db_url="sqlite:///"
-            + f"{DEFAULT_CACHE_DIR}/{self.emb_model_name}/record_manager_cache.sql",
+            + f"{DEFAULT_CACHE_DIR}/{self.namespace}/{self.emb_model_name}/record_manager_cache.sql",
         )
         self.record_manager.create_schema()
         return self.record_manager
@@ -109,7 +144,7 @@ class Cache(object):
         for file in self.cached_files_dir.iterdir():
             file.unlink()
         logger = logging.getLogger(Path(__file__).stem)
-        logger.info(f"All files in directory {DEFAULT_CACHE_DIR} are cleaned.")
+        logger.info(f"All files in directory {self.root_dir} are cleaned.")
         res = index(
             [],
             self.record_manager,
