@@ -13,6 +13,7 @@ from config import DEFAULT_CACHE_DIR, EMB_MODEL_MAP, DEFAULT_CACHE_NAMESPACE, DE
 from typing import cast, List, Optional
 import logging
 
+
 def init_cache(clear_old:bool=False,**kwargs):
     '''
     :param clear_old: if True, will delete old cache if last run cache config is different from given kwargs
@@ -48,6 +49,7 @@ def init_cache(clear_old:bool=False,**kwargs):
     set_global_value('cache', cache)
     set_global_value('cache_config', last_run_cache_config)
     return cache
+
 
 
 def load_cache():
