@@ -46,6 +46,7 @@ def init_cache(clear_old:bool=False,**kwargs):
         with open(last_run_cache_config_path, "w") as f:
             json.dump(last_run_cache_config, f)
     set_global_value('cache', cache)
+    set_global_value('cache_config', last_run_cache_config)
     return cache
 
 

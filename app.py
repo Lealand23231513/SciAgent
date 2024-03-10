@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import os
 from config import DEFAULT_CACHE_DIR, TOOLS_LIST, SUPPORT_LLMS, SUPPORT_EMBS
 from gradio_modal import Modal
-from typing import cast
+from typing import Any, cast
 import global_var
 from cache import init_cache, load_cache
 from channel import load_channel
@@ -109,10 +109,12 @@ def modal_blur():
             "response": False
         }
     )
+    channel = load_channel()
     channel.send(response_msg, 'front')
     return Modal(visible=False)
 def get_timestamp():
     global timestamp, state
+    channel = load_channel()
     response = channel.recv('front')
     if response is not None:
         timestamp = str(time.time())
@@ -177,13 +179,14 @@ def create_ui():
                             label="大语言模型"
                         )
                     with gr.Accordion(label='缓存设置'):
+                        cache_config = cast(dict[str,Any],global_var.get_global_value('cache_config'))
                         namespaceTxt = gr.Textbox(
-                            value="default",
+                            value=cast(str, cache_config['namespace']),
                             label="数据库名称"
                         )
                         embDdl = gr.Dropdown(
                             choices=cast(list[str | int | float | tuple[str, str | int | float]] | None, SUPPORT_EMBS),
-                            value="text-embedding-ada-002",
+                            value=cache_config['emb_model_name'],
                             label="Embedding模型"
                         )
                         changeCacheBtn = gr.Button(
@@ -311,18 +314,20 @@ def create_ui():
     return demo
 
 # 启动Gradio界面
-if __name__ == '__main__':
+def main():
     load_dotenv()
     global_var._init()
     if Path(DEFAULT_CACHE_DIR).exists() == False:
         Path(DEFAULT_CACHE_DIR).mkdir(parents=True)
     logging.basicConfig(level = logging.INFO, format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    logger = logging.getLogger(Path(__file__).stem)
+    
     logger.info(f'gradio version: {gr.__version__}')
-    # server = load_ws_server()
-    channel = load_channel()
-    cache = init_cache()
+    load_channel()
+    init_cache()
     _init_state_vars()
     demo = create_ui()
     logger.info('SciAgent start!')
-    demo.queue().launch(share=False, inbrowser=True)
+    demo.queue().launch(inbrowser=True)
+if __name__ == '__main__':
+    logger = logging.getLogger(Path(__file__).stem)
+    main()
