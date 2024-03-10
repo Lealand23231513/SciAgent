@@ -19,7 +19,6 @@ from langchain.agents import AgentExecutor
 from langchain_zhipu import ChatZhipuAI
 from functools import partial
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from utils import load_qwen_agent_executor
 
 logger = logging.getLogger(Path(__file__).stem)
 
@@ -82,7 +81,6 @@ def load_zhipuai_agent_excutor(tools_inst:list[BaseTool], model='glm-3-turbo'):
                                    tools=tools_inst, handle_parsing_errors=True)
     return agent_executor
 
-
 def call_agent(user_input:str, history:list[Mapping[str,str]], tools_choice:list, model:str, retrieval_temp:float, stream:bool = False):
     load_dotenv()
     
@@ -94,14 +92,11 @@ def call_agent(user_input:str, history:list[Mapping[str,str]], tools_choice:list
     agent_excutor_mapping = {
         "openai": load_openai_agent_excutor,
         "zhipuai": load_zhipuai_agent_excutor,
-        "qwen": load_qwen_agent_executor,
     }
     if 'gpt' in model:
         agent_executor = agent_excutor_mapping['openai'](tools_inst, model)
     elif 'glm' in model:
         agent_executor = agent_excutor_mapping['zhipuai'](tools_inst, model)
-    elif 'qwen' in model:
-        agent_executor = agent_excutor_mapping['qwen'](tools_inst, model)
     set_global_value('agent_executor', agent_executor)
     ans = agent_executor.invoke(
         {
