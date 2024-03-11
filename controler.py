@@ -9,7 +9,7 @@ from langchain import hub
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 from arxiv_search import get_customed_arxiv_search_tool
-from Retrieval_qa import get_retrieval_tool
+from retrieval_qa import get_retrieval_tool
 from global_var import set_global_value
 from langchain.agents.format_scratchpad.openai_tools import (
     format_to_openai_tool_messages,
