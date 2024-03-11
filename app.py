@@ -262,6 +262,7 @@ def create_ui():
                 with gr.Column():
                     pdfBox = PDF(label="PDF文档", height=1000)
                     #TODO: PDF显示不支持中文
+                    #TODO: PDF不可选择
                     #TODO: PDF一关闭就立刻重新打开问题
                 with gr.Column():
                     docChatbot = gr.Chatbot(label="问答记录", height=900)
