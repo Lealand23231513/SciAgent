@@ -6,7 +6,7 @@ def wav2txt(wav_path: str, lang: str='zh', sample_rate: int=16000):
     if lang=='zh':
         model = 'conformer_wenetspeech'
     elif lang=='en':
-        model = 'conformer_librispeech'
+        model = 'transformer_librispeech'
     result = asr(audio_file=wav_path, 
                  model=model,
                  lang=lang,
