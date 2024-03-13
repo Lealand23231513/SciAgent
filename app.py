@@ -12,7 +12,7 @@ from cache import init_cache, load_cache
 from channel import load_channel
 import json
 import time
-from gradio_pdf import PDF
+from gradio_mypdf import PDF
 from document_qa import document_qa_fn
 
 
@@ -27,15 +27,20 @@ def _init_state_vars():
     }
     timestamp = str(time.time())
 
+def check_and_clear_pdfqa_history(filepath:str|None, txt:str, chat_history:list):
+    if filepath is None:
+        return [], None
+    return chat_history, txt
+
 def chat_with_document(filepath:str, question:str, chat_history:list):
     chat_history.append([question,None])
-    yield chat_history
+    yield chat_history, gr.Textbox(interactive=False)
     answer = document_qa_fn(filepath, question)
     chat_history[-1][1]=''
     for chunk in answer:
         chat_history[-1][1]+=chunk
-        yield chat_history
-    return chat_history
+        yield chat_history, None
+    return chat_history, gr.Textbox(interactive=True)
 
 def clear_cache():
     cache = load_cache()
@@ -261,9 +266,6 @@ def create_ui():
             with gr.Row():
                 with gr.Column():
                     pdfBox = PDF(label="PDF文档", height=1000)
-                    #TODO: PDF显示不支持中文
-                    #TODO: PDF不可选择
-                    #TODO: PDF一关闭就立刻重新打开问题
                 with gr.Column():
                     docChatbot = gr.Chatbot(label="问答记录", height=900)
                     docTxtbot = gr.Textbox(label="用户对话框:", placeholder="在这里输入", lines=4)
@@ -344,7 +346,12 @@ def create_ui():
             [docTxtbot.submit, docSubmitBtn.click],
             fn=chat_with_document,
             inputs=[pdfBox, docTxtbot, docChatbot],
-            outputs=[docChatbot]
+            outputs=[docChatbot, docTxtbot]
+        )
+        pdfBox.change(
+            check_and_clear_pdfqa_history,
+            [pdfBox, docTxtbot, docChatbot],
+            [docChatbot, docTxtbot]
         )
     return demo
 
