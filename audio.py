@@ -14,7 +14,7 @@ def wav2txt(wav_path: str, lang: str='zh', sample_rate: int=16000):
         sample_rate=sample_rate)
     return result
 
-def wav2txt_client(wav_path: str, server_ip: str='127.0.0.1', port: int=8090, lang: str='zh', sample_rate: int=16000):
+def wav2txt_client(wav_path: str, server_ip: str='127.0.0.1', port: int=7860, lang: str='zh', sample_rate: int=16000):
     asrclient_executor = ASRClientExecutor()
     result = asrclient_executor(
         input=wav_path,
