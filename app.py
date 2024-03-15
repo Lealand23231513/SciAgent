@@ -1,7 +1,5 @@
 import gradio as gr
 import logging
-
-from regex import F
 from controler import call_agent
 from pathlib import Path
 from dotenv import load_dotenv
@@ -325,7 +323,7 @@ def create_ui():
                     with gr.Row():
                         vqaClearBtn = gr.ClearButton(
                             value = "清除对话记录",
-                            components = [multiModalChatbot,vqaTxtbot]
+                            components = [multiModalChatbot,vqaTxtbot,vqaImgBox]
                         )
                         vqaSubmitBtn = gr.Button("提交")
                 with gr.Column(scale=1):
@@ -442,6 +440,6 @@ def main():
     logger.info('SciAgent start!')
     demo.queue().launch(inbrowser=True)
 if __name__ == '__main__':
-    logging.basicConfig(level = logging.DEBUG, format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logging.basicConfig(level = logging.INFO, format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(Path(__file__).stem)
     main()
