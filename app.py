@@ -1,12 +1,14 @@
 import gradio as gr
 import logging
+
+from regex import F
 from controler import call_agent
 from pathlib import Path
 from dotenv import load_dotenv
 import os
-from config import DEFAULT_CACHE_DIR, TOOLS_LIST, SUPPORT_LLMS, SUPPORT_EMBS
+from config import *
 from gradio_modal import Modal
-from typing import Any, cast
+from typing import Any, cast, Generator
 import global_var
 from cache import init_cache, load_cache
 from channel import load_channel
@@ -14,9 +16,10 @@ import json
 import time
 from gradio_mypdf import PDF
 from document_qa import document_qa_fn
-
-
-
+from gradio_mchatbot import MultiModalChatbot
+import numpy as np
+from PIL import Image
+from multimodal import multimodal_chat
 
 def _init_state_vars():
     global state, timestamp
@@ -26,6 +29,40 @@ def _init_state_vars():
         "message": None
     }
     timestamp = str(time.time())
+
+def vqa_chat_submit(history:list, user_input:str, imgfile, model:str, api_key:str, base_url:str):
+    user_message = [
+        user_input,
+        {
+            "type": "file",
+            "filepath": imgfile.name
+        }
+    ]
+
+    history.append(
+        [
+            user_message,
+            None
+        ]
+    )
+    yield history, gr.Textbox(interactive=False)
+    stream_response = multimodal_chat(
+        user_message,
+        model=model,
+        stream=True,
+        api_key=api_key,
+        base_url=base_url
+    )
+    stream_response = cast(Generator, stream_response)
+    response_message = ''
+    for delta in stream_response:
+        response_message+=delta
+        history[-1][1]=response_message
+        yield history, None
+    logger.info("vqa chat end")
+    logger.info(history)
+    yield history, gr.Textbox(interactive=True)
+
 
 def check_and_clear_pdfqa_history(filepath:str|None, txt:str, chat_history:list):
     if filepath is None:
@@ -40,7 +77,7 @@ def chat_with_document(filepath:str, question:str, chat_history:list):
     for chunk in answer:
         chat_history[-1][1]+=chunk
         yield chat_history, None
-    return chat_history, gr.Textbox(interactive=True)
+    yield chat_history, gr.Textbox(interactive=True)
 
 def clear_cache():
     cache = load_cache()
@@ -276,6 +313,36 @@ def create_ui():
                             components = [docTxtbot,docChatbot]
                         )
                         docSubmitBtn = gr.Button("提交")
+        with gr.Tab(label="视觉问答"):
+            with gr.Row():
+                with gr.Column(scale=3):
+                    multiModalChatbot = MultiModalChatbot(label="SciAgent-V", height=900)
+                    gr.Markdown("输入问题并上传图片后，点击提交开始视觉问答。注意：目前暂不支持多轮对话。")
+                    with gr.Column(scale=3):
+                        vqaTxtbot = gr.Textbox(label="用户对话框:", placeholder="在这里输入", lines=4)
+                    with gr.Column(scale=1):
+                        vqaImgBox = gr.File(label='图片',file_types=["image"])
+                    with gr.Row():
+                        vqaClearBtn = gr.ClearButton(
+                            value = "清除对话记录",
+                            components = [multiModalChatbot,vqaTxtbot]
+                        )
+                        vqaSubmitBtn = gr.Button("提交")
+                with gr.Column(scale=1):
+                    with gr.Accordion(label="模型设置"):
+                        mllmDdl = gr.Dropdown(
+                            choices=cast(list[str | int | float | tuple[str, str | int | float]] | None, SUPPORT_MLLMS),
+                            value=SUPPORT_MLLMS[0],
+                            label="多模态大模型ID"
+                        )
+                        mllmApikeyDdl = gr.Textbox(
+                            label="模型api-key"
+                        )
+                        mllmBaseurlTxt = gr.Textbox(
+                            label="模型baseurl",
+                            info="如使用Openai模型此栏请留空"
+                        )
+
         # with gr.Column():
         #     state_txt_box = gr.Textbox()
         timeStampDisp = gr.Textbox(label='时间戳', value=get_timestamp, every=1, visible=False)
@@ -353,6 +420,11 @@ def create_ui():
             [pdfBox, docTxtbot, docChatbot],
             [docChatbot, docTxtbot]
         )
+        vqaSubmitBtn.click(
+            vqa_chat_submit,
+            inputs=[multiModalChatbot,vqaTxtbot,vqaImgBox,mllmDdl,mllmApikeyDdl,mllmBaseurlTxt],
+            outputs=[multiModalChatbot,vqaTxtbot]
+        )
     return demo
 
 # 启动Gradio界面
@@ -361,7 +433,6 @@ def main():
     global_var._init()
     if Path(DEFAULT_CACHE_DIR).exists() == False:
         Path(DEFAULT_CACHE_DIR).mkdir(parents=True)
-    logging.basicConfig(level = logging.INFO, format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     
     logger.info(f'gradio version: {gr.__version__}')
     load_channel()
@@ -371,5 +442,6 @@ def main():
     logger.info('SciAgent start!')
     demo.queue().launch(inbrowser=True)
 if __name__ == '__main__':
+    logging.basicConfig(level = logging.DEBUG, format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(Path(__file__).stem)
     main()

@@ -24,4 +24,9 @@ EMB_MODEL_MAP = {
     "bge-m3": {"api_key": "EMPTY", "base_url": ""},
 }
 DEFAULT_EMB_MODEL_NAME="text-embedding-ada-002"
+SUPPORT_MLLMS = [
+    "gpt-4-vision-preview"
+]
+
+
 DEFAULT_CACHE_NAMESPACE="default"
