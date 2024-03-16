@@ -28,3 +28,4 @@ websockets==10.4
 zhipuai==2.0.1
 chromadb
 pypdf
+git+https://github.com/wenet-e2e/wenet.git
