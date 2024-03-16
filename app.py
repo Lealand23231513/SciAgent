@@ -13,6 +13,10 @@ from channel import load_channel
 # from audio import wav2txt_client
 import json
 import time
+import wenet
+
+
+
 from gradio_mypdf import PDF
 from document_qa import document_qa_fn
 from gradio_mchatbot import MultiModalChatbot
@@ -84,7 +88,9 @@ def clear_cache():
     gr.Info(f'所有缓存文件已被清除。')
     return []
 
-def add_input(user_input, chatbot):
+def add_input(user_input, chatbot, user_input_wav):
+    if user_input_wav != '':
+        user_input = wav2txt(user_input_wav)
     chatbot.append((user_input,None))
     return (                                                                                                                                                                                                        
             gr.Textbox(interactive = False, value = '', placeholder = ''), 
@@ -97,6 +103,11 @@ def change_cache_config(emb_model:str, namespace:str):
     cache = init_cache(namespace=namespace, emb_model_name=emb_model)
     gr.Info("成功更改缓存设置")
     return [[i] for i in cache.all_files]
+
+def wav2txt(path:str, lang:str='chinese'):
+    model = wenet.load_model(lang)
+    result = model.transcribe(path)
+    return result['text']
 
 
 def submit(
@@ -200,13 +211,12 @@ def create_ui():
                 with gr.Column(scale=3):
                     chatbot = gr.Chatbot(label="SciAgent", height=900)
                     txtbot = gr.Textbox(label="用户对话框:", placeholder="在这里输入", lines=4)
-                    audio = gr.Audio(sources=["microphone"], type="filepath")
-                    # txtbot = wav2txt_client(wav_path=audio)
+                    audio = gr.Audio(label="语音输入:", sources='microphone', type='filepath', format='wav')
                     chat_history = gr.State([])
                     with gr.Row():
                         clearBtn = gr.ClearButton(
                             value = "清除对话记录",
-                            components = [txtbot,chatbot,chat_history]
+                            components = [txtbot,chatbot,audio,chat_history]
                         )
                         submitBtn = gr.Button("提交")
                 with gr.Column(scale=1):
@@ -389,7 +399,7 @@ def create_ui():
 
         submitBtn.click(
             fn = add_input, 
-            inputs = [txtbot, chatbot], 
+            inputs = [txtbot, chatbot, audio], 
             outputs = [txtbot, chatbot, zhToolsDdl, temperatureSlider]
         ).then(
             fn = submit, 
