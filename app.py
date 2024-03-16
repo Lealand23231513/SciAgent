@@ -10,6 +10,7 @@ from typing import Any, cast, Generator
 import global_var
 from cache import init_cache, load_cache
 from channel import load_channel
+# from audio import wav2txt_client
 import json
 import time
 from gradio_mypdf import PDF
@@ -199,6 +200,8 @@ def create_ui():
                 with gr.Column(scale=3):
                     chatbot = gr.Chatbot(label="SciAgent", height=900)
                     txtbot = gr.Textbox(label="用户对话框:", placeholder="在这里输入", lines=4)
+                    audio = gr.Audio(sources=["microphone"], type="filepath")
+                    # txtbot = wav2txt_client(wav_path=audio)
                     chat_history = gr.State([])
                     with gr.Row():
                         clearBtn = gr.ClearButton(
@@ -334,7 +337,8 @@ def create_ui():
                             label="多模态大模型ID"
                         )
                         mllmApikeyDdl = gr.Textbox(
-                            label="模型api-key"
+                            label="模型api-key",
+                            type="password"
                         )
                         mllmBaseurlTxt = gr.Textbox(
                             label="模型baseurl",
