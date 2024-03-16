@@ -160,7 +160,7 @@ class Cache(object):
 
     def cache_file(
         self,
-        path: str,
+        path: str|Path,
         save_local=False,
         chunk_size=1000,
         chunk_overlap=200,
@@ -172,7 +172,10 @@ class Cache(object):
         :param chunk_size: max length of the chunk
         """
         if save_local == True:
-            shutil.copy(path, Path(DEFAULT_CACHE_DIR + "/cached-files"))
+            shutil.copy(path, self.cached_files_dir)
+        if isinstance(path, str)==False:
+            path = str(path)
+        path = cast(str,path)
         if path.split(".")[-1] == "pdf":
             loader = PyPDFLoader(path)
         elif path.split(".")[-1] == "docx":

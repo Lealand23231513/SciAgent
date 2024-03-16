@@ -3,6 +3,7 @@ test.*
 .vscode
 test*.*
 test*
-__pycache__
+__pycache__*
 .cache
 datasets
+flagged

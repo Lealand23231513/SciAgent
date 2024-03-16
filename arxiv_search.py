@@ -35,7 +35,7 @@ class CustomedArxivAPIWrapper(ArxivAPIWrapper):
             query: a plaintext search query
         """ 
         logger = logging.getLogger('.'.join((Path(__file__).stem, self.__class__.__name__)))
-        def download_callback(written_path):
+        def download_callback(written_path:str):
             cache = load_cache()
             cache.cache_file(written_path)
             logger.info(f'successfully download {Path(written_path).name}')
@@ -68,8 +68,9 @@ class CustomedArxivAPIWrapper(ArxivAPIWrapper):
                 res = cast(str, channel.push(msg,require_response=True))
                 res = json.loads(res)
                 if res['response'] == True:
+                    cache = load_cache()
                     pool.apply_async(
-                        partial(result.download_pdf, dirpath=DEFAULT_CACHE_DIR+'/cached-files'), 
+                        partial(result.download_pdf, dirpath=cache.cached_files_dir), 
                         callback=download_callback, 
                         error_callback=lambda err:logger.error(err)
                     )
@@ -105,7 +106,7 @@ class CustomedArxivAPIWrapper(ArxivAPIWrapper):
 
 def get_customed_arxiv_search_tool(**kwargs) -> BaseTool:
     extra_keys = ["top_k_results", "load_max_docs", "load_all_available_meta", "download"]
-    sub_kwargs = {k: kwargs[k] for k in extra_keys if k in kwargs}
+    sub_kwargs = {k: kwargs[k] for k in extra_keys if k in kwargs.keys()}
     return ArxivQueryRun(api_wrapper=CustomedArxivAPIWrapper(**sub_kwargs))
 
 def arxiv_search_with_agent(user_input:str):
