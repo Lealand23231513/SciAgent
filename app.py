@@ -88,7 +88,7 @@ def clear_cache():
     gr.Info(f'所有缓存文件已被清除。')
     return []
 
-def add_input(user_input, chatbot, user_input_wav):
+def add_input(user_input, chatbot, user_input_wav): #TODO user_input_wav
     if user_input_wav != '':
         user_input = wav2txt(user_input_wav)
     chatbot.append((user_input,None))
@@ -96,7 +96,8 @@ def add_input(user_input, chatbot, user_input_wav):
             gr.Textbox(interactive = False, value = '', placeholder = ''), 
             chatbot, 
             gr.Dropdown(interactive=False),
-            gr.Slider(interactive=False)
+            gr.Slider(interactive=False),
+            None
     )
 
 def change_cache_config(emb_model:str, namespace:str):
@@ -211,9 +212,13 @@ def create_ui():
                 with gr.Column(scale=3):
                     chatbot = gr.Chatbot(label="SciAgent", height=900)
                     txtbot = gr.Textbox(label="用户对话框:", placeholder="在这里输入", lines=4)
-                    audio = gr.Audio(label="语音输入:", sources='microphone', type='filepath', format='wav')
+                    audio = gr.Audio(label="语音输入:", type='filepath', format='wav')
                     chat_history = gr.State([])
                     with gr.Row():
+                        # clearBtn = gr.ClearButton(
+                        #     value = "清除对话记录",
+                        #     components = [txtbot,chatbot,chat_history]
+                        # )                        
                         clearBtn = gr.ClearButton(
                             value = "清除对话记录",
                             components = [txtbot,chatbot,audio,chat_history]
@@ -399,8 +404,8 @@ def create_ui():
 
         submitBtn.click(
             fn = add_input, 
-            inputs = [txtbot, chatbot, audio], 
-            outputs = [txtbot, chatbot, zhToolsDdl, temperatureSlider]
+            inputs = [txtbot, chatbot, audio],#TODO audio 
+            outputs = [txtbot, chatbot, zhToolsDdl, temperatureSlider, audio]
         ).then(
             fn = submit, 
             inputs = [chatbot, chat_history, zhToolsDdl, downloadChk, temperatureSlider, llmDdl], 

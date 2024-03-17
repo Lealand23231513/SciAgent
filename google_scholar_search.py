@@ -1,4 +1,6 @@
 import logging
+import json
+import global_var
 from pathlib import Path
 from typing import Optional, Type
 
@@ -9,9 +11,11 @@ import requests
 from pathlib import Path
 from urllib import parse
 from scholarly import scholarly
-from typing import Optional
+from typing import Optional, cast
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.callbacks import CallbackManagerForToolRun
+from channel import Channel
+
 logger = logging.getLogger(Path(__file__).stem)
 
 class GoogleScholarWrapper(BaseModel):
@@ -21,10 +25,6 @@ class GoogleScholarWrapper(BaseModel):
     load_max_docs: int = 100
 
     def run(self, query: str) -> str:
-        def download_callback(written_path:str):
-            cache = load_cache()
-            cache.cache_file(written_path)
-            logger.info(f'successfully download {Path(written_path).name}')
         logger = logging.getLogger(
             ".".join((Path(__file__).stem, self.__class__.__name__))
         )
@@ -37,8 +37,7 @@ class GoogleScholarWrapper(BaseModel):
 
         docs = []
         try:
-            i=0
-            while i<self.top_k_results:
+            for _ in range(self.top_k_results):
                 result=next(search_result_generator)
                 title = result["bib"]["title"]
                 url = result.get("eprint_url")
@@ -52,35 +51,50 @@ class GoogleScholarWrapper(BaseModel):
                 metadata = {
                     "Authors": ", ".join(result["bib"]["author"]),
                     "Title": title,
-                    "Summary": result["bib"].get("abstract", "No abstract available"),
+                    "Summary": result["bib"].get("abstract", "No abstract available"),#TODO not full abstract
                     "Published": result["bib"]["pub_year"],
                     "links": url if url else "No URL available",
                     **extra_metadata,
                 }
                 texts = ["{}: {}".format(k, metadata[k]) for k in metadata.keys()]
                 logger.info(texts)
-                docs.append("\n".join(texts))
+                
 
                 if self.download:
                     if url is None:
-                        logger.info(f"No URL available for paper:{title}")
-                        continue
-                    cache = load_cache()
-                    folder_name = cache.cached_files_dir
-                    file_name = parse.quote(title, safe = "") + '.pdf'
-                    try:
-                        res = requests.get(url)
-                    except Exception as e:
-                        logger.exception(repr(e))
-                    if res.status_code == 200:
-                        file_path = Path(folder_name)/file_name
-                        with open(file_path, "wb") as fp:
-                            fp.write(res.content)
-                        cache.cache_file(file_path)
+                        logger.info(f"No URL available for paper:\"{title}\"")
+                        texts.append(f"Can't download paper \"{title}\"")
                     else:
-                        logger.info(f"Can't download paper {title} dur to a network error.\
-                                    \n status code: {res.status_code}")
-                i+=1
+                        msg = json.dumps(
+                            {
+                                "type": "funcall",
+                                "name": "confirm",
+                                "message": f'Do you want to download file "{title}" ?',
+                            }
+                        )
+                        channel = cast(Channel, global_var.get_global_value("channel"))
+                        res = cast(str, channel.push(msg, require_response=True))
+                        res = json.loads(res)
+                        cache = load_cache()
+                        folder_name = cache.cached_files_dir
+                        file_name = parse.quote(title, safe = "") + '.pdf'
+                        if res['response'] == True:
+                            try:
+                                res = requests.get(url)
+                            except Exception as e:
+                                logger.exception(repr(e))
+                            if res.status_code == 200:
+                                file_path = Path(folder_name)/file_name
+                                with open(file_path, "wb") as fp:
+                                    fp.write(res.content)
+                                cache.cache_file(file_path)
+                                logger.info(f'successfully download {file_path.name}')
+                            else:
+                                logger.info(f"Can't download paper \"{title}\" due to a network error. status code: {res.status_code}")
+                                texts.append(f"Can't download paper \"{title}\"")
+                        else:
+                            logger.info(f"Not download paper \"{title}\"")
+                docs.append("\n".join(texts))
         except StopIteration:
             pass
         except Exception as e:
