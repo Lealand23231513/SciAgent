@@ -12,6 +12,7 @@ from langchain_core.callbacks import CallbackManagerForToolRun
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.tools import BaseTool
 from sys import _getframe
+from functools import partial
 
 
 logger = logging.getLogger(Path(__file__).stem)
@@ -24,7 +25,7 @@ Context:
 question: {question}
 """
 
-def retrieval(query:str, path:str|None=None) -> str:
+def retrieval(temperatureValue:float, query:str, path:str|None=None) -> str:
     '''
     Retrieve the content of the cached papers and response to the user's query.
     :param query: User's question about the paper
@@ -40,7 +41,7 @@ def retrieval(query:str, path:str|None=None) -> str:
         input_variables=["context", "question"]
     )
     chain_type_kwargs = {"prompt": prompt}
-    qa_chain = RetrievalQA.from_chain_type(llm=ChatOpenAI(model='gpt-3.5-turbo-0125'), chain_type="stuff",# TODO: temperature, llm(changable)
+    qa_chain = RetrievalQA.from_chain_type(llm=ChatOpenAI(model='gpt-3.5-turbo-0125', temperature=temperatureValue), chain_type="stuff",# TODO: temperature, llm(changable)
                                      retriever=cache.vectorstore.as_retriever(),
                                      chain_type_kwargs=chain_type_kwargs,
                                      return_source_documents=True)
@@ -67,4 +68,8 @@ class RetrievalQueryRun(BaseTool):
         """Use the Retrieval tool."""
         return self.retrieve_function(query)
 def get_retrieval_tool():
-    return RetrievalQueryRun()
+    return RetrievalQueryRun(partial(retrieval, temperatureValue = 0.7))
+
+if __name__ == "main":
+    tool = get_retrieval_tool()
+    tool._run()

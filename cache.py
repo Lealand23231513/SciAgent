@@ -238,7 +238,7 @@ class Cache(object):
             "num_deleted": num_deleted,
         }
         logger.info(delete_res)
-        return delete_res
+        return None
 
     # def __deepcopy__(self, memo=None):
     #     '''

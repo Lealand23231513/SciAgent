@@ -10,16 +10,17 @@ from typing import Any, cast, Generator
 import global_var
 from cache import init_cache, load_cache
 from channel import load_channel
-# from audio import wav2txt_client
+from gradio_mypdf import PDF
+from gradio_mchatbot import MultiModalChatbot
 import json
 import time
-import wenet
+from cache import Cache
+# import wenet
 
 
 
-from gradio_mypdf import PDF
+#from gradio_mypdf import PDF
 from document_qa import document_qa_fn
-from gradio_mchatbot import MultiModalChatbot
 import numpy as np
 from PIL import Image
 from multimodal import multimodal_chat
@@ -88,9 +89,7 @@ def clear_cache():
     gr.Info(f'所有缓存文件已被清除。')
     return []
 
-def add_input(user_input, chatbot, user_input_wav):
-    if user_input_wav != '':
-        user_input = wav2txt(user_input_wav)
+def add_input(user_input, chatbot):
     chatbot.append((user_input,None))
     return (                                                                                                                                                                                                        
             gr.Textbox(interactive = False, value = '', placeholder = ''), 
@@ -104,10 +103,10 @@ def change_cache_config(emb_model:str, namespace:str):
     gr.Info("成功更改缓存设置")
     return [[i] for i in cache.all_files]
 
-def wav2txt(path:str, lang:str='chinese'):
-    model = wenet.load_model(lang)
-    result = model.transcribe(path)
-    return result['text']
+# def wav2txt(path:str, lang:str='chinese'):
+#     model = wenet.load_model(lang)
+#     result = model.transcribe(path)
+#     return result['text']
 
 
 def submit(
@@ -211,12 +210,12 @@ def create_ui():
                 with gr.Column(scale=3):
                     chatbot = gr.Chatbot(label="SciAgent", height=900)
                     txtbot = gr.Textbox(label="用户对话框:", placeholder="在这里输入", lines=4)
-                    audio = gr.Audio(label="语音输入:", sources='microphone', type='filepath', format='wav')
+                    # audio = gr.Audio(label="语音输入:", sources='microphone', type='filepath', format='wav')
                     chat_history = gr.State([])
                     with gr.Row():
                         clearBtn = gr.ClearButton(
                             value = "清除对话记录",
-                            components = [txtbot,chatbot,audio,chat_history]
+                            components = [txtbot,chatbot,chat_history]
                         )
                         submitBtn = gr.Button("提交")
                 with gr.Column(scale=1):
@@ -308,6 +307,16 @@ def create_ui():
                 label='缓存文章',
                 samples=[[i] for i in cache.all_files]
             )
+            with gr.Column(scale= 3):
+                specific_article = gr.Dropdown(
+                    label='已缓存的文章',
+                    choices=cache.all_files,
+                    value=cache.all_files[0] if cache.all_files else None,  # 如果缓存为空，则默认选择第一个选项
+                    info="选择缓存的文章",
+                    interactive=True
+                )
+            delete_button = gr.Button("删除")
+            delete_button.click(fn=Cache.delete_file, inputs=specific_article, outputs=[])
         with gr.Tab(label='工作台'):
             pass
         with gr.Tab(label='PDF文档问答'):
@@ -399,7 +408,7 @@ def create_ui():
 
         submitBtn.click(
             fn = add_input, 
-            inputs = [txtbot, chatbot, audio], 
+            inputs = [txtbot, chatbot], 
             outputs = [txtbot, chatbot, zhToolsDdl, temperatureSlider]
         ).then(
             fn = submit, 
