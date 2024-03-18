@@ -20,7 +20,7 @@ from langchain_zhipu import ChatZhipuAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from utils import load_qwen_agent_executor
 from tools import ToolsState
-from llm_state import LLMState
+from model_state import LLMState
 from channel import load_channel
 
 logger = logging.getLogger(Path(__file__).stem)

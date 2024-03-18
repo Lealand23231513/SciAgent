@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import os
 from config import *
 from gradio_mchatbot import MultiModalChatbot
-from typing import Any, cast, Generator
+from typing import Any, Optional, cast, Generator
 import global_var
 from cache import init_cache, load_cache
 from channel import load_channel
@@ -22,8 +22,14 @@ from document_qa import document_qa_fn
 import numpy as np
 from PIL import Image
 from multimodal import multimodal_chat
-from llm_state import LLMState, LLMConst
-from tools import RetrievalState, ToolsState, WebSearchState, RetrievalStateConst, WebSearchStateConst
+from model_state import LLMState, LLMStateConst, MLLMState, MLLMStateConst
+from tools import (
+    RetrievalState,
+    ToolsState,
+    WebSearchState,
+    RetrievalStateConst,
+    WebSearchStateConst,
+)
 
 
 def _init_state_vars():
@@ -32,22 +38,22 @@ def _init_state_vars():
     _timestamp = str(time.time())
     global_var.set_global_value("state_mutex", False)
     global_var.set_global_value("llm_state", LLMState())
+    global_var.set_global_value("mllm_state", MLLMState())
     global_var.set_global_value("retrieval_state", RetrievalState())
     global_var.set_global_value("websearch_state", WebSearchState())
     global_var.set_global_value("tools_state", ToolsState())
     global_var.set_global_value("chat_history", [])
 
 
-def vqa_chat_submit(
-    history: list, user_input: str, imgfile, model: str, api_key: str, base_url: str
-):
-    user_message = [user_input, {"type": "file", "filepath": imgfile.name}]
-
+def vqa_chat(history: list, user_input: Optional[str], img_path: Optional[str]):
+    state.StateMutex.set_state_mutex(True)
+    if img_path:
+        user_message = [user_input, {"type": "file", "filepath": img_path}]
+    else:
+        user_message=[user_input]
     history.append([user_message, None])
-    yield history, gr.Textbox(interactive=False)
-    stream_response = multimodal_chat(
-        user_message, model=model, stream=True, api_key=api_key, base_url=base_url
-    )
+    yield history, gr.update(interactive=False)
+    stream_response = multimodal_chat(user_message, stream=True)
     stream_response = cast(Generator, stream_response)
     response_message = ""
     for delta in stream_response:
@@ -55,8 +61,8 @@ def vqa_chat_submit(
         history[-1][1] = response_message
         yield history, None
     logger.info("vqa chat end")
-    logger.info(history)
-    yield history, gr.Textbox(interactive=True)
+    yield history, gr.update(interactive=True)
+    state.StateMutex.set_state_mutex(False)
 
 
 def check_and_clear_pdfqa_history(filepath: str | None, txt: str, chat_history: list):
@@ -94,7 +100,7 @@ def delete_files(filenames: list[str]):
     cache = load_cache()
     for filename in filenames:
         cache.delete_file(filename)
-        gr.Info(f"文件 《{filename}》已经被删除")
+        gr.Info(f"文件 ({filename})已经被删除")
     logger.info(cache.all_files)
     return gr.Dropdown(
         label="选择要从本地数据库中删除的文章",
@@ -136,7 +142,7 @@ def submit(chatbot, user_input, user_input_wav):
     if user_input_wav:
         user_input = wav2txt(user_input_wav)
     chatbot.append((user_input, None))
-    yield chatbot,None,None
+    yield chatbot, None, None
     full_response = ""
     for ai_response in call_agent(
         user_input,
@@ -144,7 +150,7 @@ def submit(chatbot, user_input, user_input_wav):
     ):
         full_response += str(ai_response)
         chatbot[-1] = (chatbot[-1][0], full_response)
-        yield chatbot,None,None
+        yield chatbot, None, None
     chat_history.append({"role": "assistant", "content": f"{full_response}"})
     logger.info("submit end")
     state.StateMutex.set_state_mutex(False)
@@ -247,12 +253,12 @@ def create_ui():
                         )
                         llmApikeyDdl = gr.Textbox(
                             label="模型api-key",
-                            value=LLMConst.DEFAULT_API_KEY,
+                            value=LLMStateConst.DEFAULT_API_KEY,
                             type="password",
                         )
                         llmBaseurlTxt = gr.Textbox(
                             label="模型baseurl",
-                            value=LLMConst.DEFAULT_BASE_URL,
+                            value=LLMStateConst.DEFAULT_BASE_URL,
                             info="如使用Openai模型此栏请留空",
                         )
                         gr.on(
@@ -289,12 +295,13 @@ def create_ui():
                         changeCacheBtn = gr.Button(value="切换本地数据库设置")
                     with gr.Accordion(label="搜索设置", open=False):
                         downloadChk = gr.Checkbox(
-                            label="下载",
-                            value=WebSearchStateConst.DEFAULT_DOWNLOAD
+                            label="下载", value=WebSearchStateConst.DEFAULT_DOWNLOAD
                         )
                         downloadChk.change(
-                            lambda download: state.change_state('websearch_state', download=download),
-                            inputs=[downloadChk]
+                            lambda download: state.change_state(
+                                "websearch_state", download=download
+                            ),
+                            inputs=[downloadChk],
                         )
                     with gr.Accordion(label="RAG设置", open=False):
                         temperatureSlider = gr.Slider(
@@ -396,8 +403,8 @@ def create_ui():
             uploadFileBot.upload(
                 upload, inputs=[uploadFileBot], outputs=[cacheFilesDdl, dstCachedPapers]
             ).then(lambda: gr.update(value=None), outputs=[uploadFileBot])
-        with gr.Tab(label="工作台"):
-            pass
+        # with gr.Tab(label="工作台"):
+        #     pass
         with gr.Tab(label="PDF文档问答"):
             with gr.Row():
                 with gr.Column():
@@ -416,9 +423,7 @@ def create_ui():
         with gr.Tab(label="视觉问答"):
             with gr.Row():
                 with gr.Column(scale=3):
-                    multiModalChatbot = MultiModalChatbot(
-                        label="SciAgent-V"
-                    )
+                    multiModalChatbot = MultiModalChatbot(label="SciAgent-V")
                     gr.Markdown(
                         "输入问题并上传图片后，点击提交开始视觉问答。注意：目前暂不支持多轮对话。"
                     )
@@ -427,27 +432,60 @@ def create_ui():
                             label="用户对话框:", placeholder="在这里输入", lines=4
                         )
                     with gr.Column(scale=1):
-                        vqaImgBox = gr.File(label="图片", file_types=["image"])
+                        vqaImgBox = gr.Image(label="图片", type="filepath")
                     with gr.Row():
                         vqaClearBtn = gr.ClearButton(
                             value="清除对话记录",
-                            components=[multiModalChatbot, vqaTxtbot, vqaImgBox],
+                            components=[multiModalChatbot],
                         )
                         vqaSubmitBtn = gr.Button("提交")
                 with gr.Column(scale=1):
                     with gr.Accordion(label="模型设置"):
                         mllmDdl = gr.Dropdown(
-                            choices=cast(
-                                list[str | int | float | tuple[str, str | int | float]]
-                                | None,
-                                SUPPORT_MLLMS,
-                            ),
-                            value=SUPPORT_MLLMS[0],
+                            choices=MLLMStateConst.MLLM_CHOICES,  # type:ignore
+                            value=MLLMStateConst.DEFAULT_MLLM,
                             label="多模态大模型ID",
                         )
-                        mllmApikeyDdl = gr.Textbox(label="模型api-key", type="password")
+                        mllmApikeyDdl = gr.Textbox(
+                            label="模型api-key",
+                            type="password",
+                            value=MLLMStateConst.DEFAULT_API_KEY,
+                        )
                         mllmBaseurlTxt = gr.Textbox(
-                            label="模型baseurl", info="如使用Openai模型此栏请留空"
+                            label="模型baseurl",
+                            info="如使用Openai模型此栏请留空",
+                            value=MLLMStateConst.DEFAULT_BASE_URL,
+                        )
+                        mllmMaxTokens = gr.Slider(
+                            label="max tokens",
+                            minimum=MLLMStateConst.MINIMUN_MAX_TOKENS,
+                            maximum=MLLMStateConst.MAXIMUM_MAX_TOKENS,
+                            value=MLLMStateConst.DEFAULT_MAX_TOKENS,
+                        )
+                        gr.on(
+                            [
+                                mllmDdl.change,
+                                mllmApikeyDdl.change,
+                                mllmBaseurlTxt.change,
+                                mllmMaxTokens.change,
+                            ],
+                            lambda model, api_key, base_url, max_tokens: state.change_state(
+                                "mllm_state",
+                                model=model,
+                                api_key=api_key,
+                                base_url=base_url,
+                                max_tokens=max_tokens,
+                            ),
+                            inputs=[mllmDdl, mllmApikeyDdl, mllmBaseurlTxt, mllmMaxTokens]
+                        )
+                        vqaSubmitBtn.click(
+                            vqa_chat,
+                            inputs=[
+                                multiModalChatbot,
+                                vqaTxtbot,
+                                vqaImgBox,
+                            ],
+                            outputs=[multiModalChatbot, vqaTxtbot],
                         )
 
         # with gr.Column():
@@ -479,9 +517,7 @@ def create_ui():
             outputs=[dstCachedPapers],
         )
         submitBtn.click(
-            fn=submit,
-            inputs=[chatbot, txtbot, audio],
-            outputs=[chatbot, txtbot, audio]
+            fn=submit, inputs=[chatbot, txtbot, audio], outputs=[chatbot, txtbot, audio]
         )
         gr.on(
             [docTxtbot.submit, docSubmitBtn.click],
@@ -493,18 +529,6 @@ def create_ui():
             check_and_clear_pdfqa_history,
             [pdfBox, docTxtbot, docChatbot],
             [docChatbot, docTxtbot],
-        )
-        vqaSubmitBtn.click(
-            vqa_chat_submit,
-            inputs=[
-                multiModalChatbot,
-                vqaTxtbot,
-                vqaImgBox,
-                mllmDdl,
-                mllmApikeyDdl,
-                mllmBaseurlTxt,
-            ],
-            outputs=[multiModalChatbot, vqaTxtbot],
         )
     return demo
 

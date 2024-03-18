@@ -44,13 +44,13 @@ def init_cache(clear_old:bool=False,**kwargs):
                     "namespace": DEFAULT_CACHE_NAMESPACE,
                     "emb_model_name": DEFAULT_EMB_MODEL_NAME
                 }
-                logger.error("raised error when loading last run cache config,so set it as default")
+                logger.error("raised error when loading last run cache config, so set it as default")
         if last_run_cache_config!=kwargs:
             if clear_old:
                 logger.info(f'last run cache config {last_run_cache_config} is different from given kwargs, so clear last run cache and build a new cache')
-                _clear_last_run_cache(last_run_cache_config)
+                _clear_last_run_cache(**last_run_cache_config)
             last_run_cache_config.update(kwargs)
-        new_cache_config = last_run_cache_config
+        new_cache_config:dict[str,Any] = last_run_cache_config
         with open(last_run_cache_config_path, "w") as f:
             json.dump(new_cache_config, f)
         cache = Cache(**new_cache_config)
