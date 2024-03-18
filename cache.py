@@ -13,6 +13,17 @@ from config import DEFAULT_CACHE_DIR, EMB_MODEL_MAP, DEFAULT_CACHE_NAMESPACE, DE
 from typing import cast, List, Optional
 import logging
 
+def _first_init_cache(**kwargs):
+    cache = Cache(**kwargs)
+    last_run_cache_config = {
+        "namespace": cache.namespace,
+        "emb_model_name": cache.emb_model_name,
+    }
+    return last_run_cache_config
+
+def _clear_last_run_cache(**last_run_cache_config):
+    cache=Cache(**last_run_cache_config)
+    cache.clear_all()
 
 def init_cache(clear_old:bool=False,**kwargs):
     '''
@@ -26,28 +37,31 @@ def init_cache(clear_old:bool=False,**kwargs):
         default_cache_dir.mkdir(parents=True)
     if last_run_cache_config_path.exists():
         with open(last_run_cache_config_path) as f:
-            last_run_cache_config = cast(dict[str, Any], json.load(f))
+            try:
+                last_run_cache_config = cast(dict[str, Any], json.load(f))
+            except Exception:
+                last_run_cache_config = {
+                    "namespace": DEFAULT_CACHE_NAMESPACE,
+                    "emb_model_name": DEFAULT_EMB_MODEL_NAME
+                }
+                logger.error("raised error when loading last run cache config,so set it as default")
         if last_run_cache_config!=kwargs:
             if clear_old:
                 logger.info(f'last run cache config {last_run_cache_config} is different from given kwargs, so clear last run cache and build a new cache')
-                cache=Cache(**last_run_cache_config)
-                cache.clear_all()
+                _clear_last_run_cache(last_run_cache_config)
             last_run_cache_config.update(kwargs)
-            with open(last_run_cache_config_path, "w") as f:
-                json.dump(last_run_cache_config, f)
-        cache = Cache(**last_run_cache_config)
+        new_cache_config = last_run_cache_config
+        with open(last_run_cache_config_path, "w") as f:
+            json.dump(new_cache_config, f)
+        cache = Cache(**new_cache_config)
     else:
         logger.info("Can't find last run config, will create a config file")
         last_run_cache_config_path.touch()
-        cache = Cache(**kwargs)
-        last_run_cache_config = {
-            "namespace": cache.namespace,
-            "emb_model_name": cache.emb_model_name,
-        }
+        new_cache_config = _first_init_cache(**kwargs)
         with open(last_run_cache_config_path, "w") as f:
-            json.dump(last_run_cache_config, f)
+            json.dump(new_cache_config, f)
     set_global_value('cache', cache)
-    set_global_value('cache_config', last_run_cache_config)
+    set_global_value('cache_config', new_cache_config)
     return cache
 
 
