@@ -5,26 +5,25 @@ from pathlib import Path
 from dotenv import load_dotenv
 import os
 from config import *
-from gradio_modal import Modal
+from gradio_mchatbot import MultiModalChatbot
 from typing import Any, cast, Generator
 import global_var
 from cache import init_cache, load_cache
 from channel import load_channel
-
-# from audio import wav2txt_client
 import json
 import time
+from cache import Cache
 import wenet
 import state
 
 from gradio_mypdf import PDF
+from gradio_modal import Modal
 from document_qa import document_qa_fn
-from gradio_mchatbot import MultiModalChatbot
 import numpy as np
 from PIL import Image
 from multimodal import multimodal_chat
 from llm_state import LLMState, LLMConst
-from tools import RetrievalState, ToolsState, WebSearchState, RetrievalConst
+from tools import RetrievalState, ToolsState, WebSearchState, RetrievalStateConst, WebSearchStateConst
 
 
 def _init_state_vars():
@@ -77,23 +76,45 @@ def chat_with_document(filepath: str, question: str, chat_history: list):
     yield chat_history, gr.Textbox(interactive=True)
 
 
-def clear_cache():
+def delete_all_files():
     cache = load_cache()
     cache.clear_all()
     gr.Info(f"所有缓存文件已被清除。")
-    return []
-
-
-@state.StateMutex(False)
-def add_input(chatbot, user_input, user_input_wav):
-    if user_input_wav:
-        user_input = wav2txt(user_input_wav)
-    chatbot.append((user_input, None))
     return (
-        chatbot,
-        gr.update(value="", interactive=False),
-        gr.update(interactive=False),
+        gr.Dropdown(
+            label="选择要从本地数据库中删除的文章",
+            choices=cache.all_files,  # type:ignore
+            interactive=True,
+        ),
+        [],
     )
+
+
+def delete_files(filenames: list[str]):
+    cache = load_cache()
+    for filename in filenames:
+        cache.delete_file(filename)
+        gr.Info(f"文件 《{filename}》已经被删除")
+    logger.info(cache.all_files)
+    return gr.Dropdown(
+        label="选择要从本地数据库中删除的文章",
+        choices=cache.all_files,  # type:ignore
+        interactive=True,
+    ), [[i] for i in cache.all_files]
+
+
+def upload(files: list[str]):
+    cache = load_cache()
+    logger.info(files)
+    for filepath in files:
+        cache.cache_file(filepath, save_local=True)
+        gr.Info(f"文件 {Path(filepath).name} 上传成功!")
+
+    return gr.Dropdown(
+        label="选择要从本地数据库中删除的文章",
+        choices=cache.all_files,  # type:ignore
+        interactive=True,
+    ), [[i] for i in cache.all_files]
 
 
 def change_cache_config(emb_model: str, namespace: str):
@@ -108,14 +129,14 @@ def wav2txt(path: str, lang: str = "chinese"):
     return result["text"]
 
 
-
-def submit(
-    chatbot
-):
+def submit(chatbot, user_input, user_input_wav):
     state.StateMutex.set_state_mutex(True)
-    chat_history=cast(list, global_var.get_global_value('chat_history'))
-    user_input = chatbot[-1][0]
+    chat_history = cast(list, global_var.get_global_value("chat_history"))
     chat_history.append({"role": "user", "content": f"{user_input}"})
+    if user_input_wav:
+        user_input = wav2txt(user_input_wav)
+    chatbot.append((user_input, None))
+    yield chatbot,None,None
     full_response = ""
     for ai_response in call_agent(
         user_input,
@@ -123,19 +144,10 @@ def submit(
     ):
         full_response += str(ai_response)
         chatbot[-1] = (chatbot[-1][0], full_response)
-        yield chatbot
+        yield chatbot,None,None
     chat_history.append({"role": "assistant", "content": f"{full_response}"})
     logger.info("submit end")
-    yield chatbot
     state.StateMutex.set_state_mutex(False)
-
-
-def upload(file_obj):
-    cache = load_cache()
-    cache.cache_file(str(Path(file_obj.name)), save_local=True)
-    gr.Info("文件 {} 上传成功!".format(os.path.basename(Path(file_obj.name))))
-
-    return [[i] for i in cache.all_files]
 
 
 def confirmBtn_click():
@@ -175,91 +187,88 @@ def create_ui():
                     modal: Modal(visible=True, allow_user_close=False),
                     modalMsg: _state["message"],
                 }
-        if _state['type'] == 'modal':
-            if _state['name'] == 'error':
-                raise gr.Error(cast(str, _state['message']))
-            if _state['name'] == 'info':
-                gr.Info(cast(str, _state['message']))
+        if _state["type"] == "modal":
+            if _state["name"] == "error":
+                raise gr.Error(cast(str, _state["message"]))
+            if _state["name"] == "info":
+                gr.Info(cast(str, _state["message"]))
         return {modal: Modal(visible=False), modalMsg: ""}
 
     with gr.Blocks(title="SciAgent", theme="soft") as demo:
-        with gr.Tab(label="聊天"):
+        with gr.Tab(label="问答"):
             with gr.Row():
                 with gr.Column(scale=3):
-                    chatbot = gr.Chatbot(label="SciAgent", height=900)
-                    txtbot = gr.Textbox(
-                        label="用户对话框:", placeholder="在这里输入", lines=4
-                    )
-                    audio = gr.Audio(label="语音输入:", type="filepath", format="wav")
+                    chatbot = gr.Chatbot(label="SciAgent")
+                    with gr.Row():
+                        txtbot = gr.Textbox(
+                            label="用户对话框:",
+                            placeholder="在这里输入",
+                            lines=8,
+                            scale=3,
+                        )
+                        audio = gr.Audio(
+                            label="语音输入", type="filepath", format="wav", scale=1
+                        )
                     with gr.Row():
                         clearBtn = gr.ClearButton(
                             value="清除对话记录",
-                            components=[txtbot, chatbot, audio],
+                            components=[chatbot],
                         )
                         submitBtn = gr.Button("提交")
                         clearBtn.click(
-                            fn=lambda :global_var.set_global_value('chat_history',[])
+                            fn=lambda: global_var.set_global_value("chat_history", [])
                         )
                 with gr.Column(scale=1):
-                    with gr.Row():
-                        tools_state = cast(
-                            ToolsState, global_var.get_global_value("tools_state")
+                    tools_state = cast(
+                        ToolsState, global_var.get_global_value("tools_state")
+                    )
+                    toolsDdl = gr.Dropdown(
+                        choices=tools_state.tools_choices,  # type:ignore
+                        value=tools_state.tools_select,  # type:ignore
+                        multiselect=True,
+                        label="工具",
+                        info="选择要使用的工具",
+                        interactive=True,
+                    )
+                    toolsDdl.change(
+                        lambda tools_select: state.change_state(
+                            "tools_state", tools_select=tools_select
+                        ),
+                        inputs=[toolsDdl],
+                    )
+                    with gr.Accordion(label="模型设置"):
+                        llm_state = cast(
+                            LLMState, global_var.get_global_value("llm_state")
                         )
-                        toolsDdl = gr.Dropdown(
-                            choices=tools_state.tools_choices,  # type:ignore
-                            value=tools_state.tools_select,  # type:ignore
-                            multiselect=True,
-                            label="工具",
-                            info="选择要使用的工具",
-                            interactive=True,
+                        llmDdl = gr.Dropdown(
+                            choices=SUPPORT_LLMS,  # type: ignore
+                            value=llm_state.model,
+                            label="大语言模型ID",
                         )
-                        toolsDdl.change(
-                            lambda tools_select: state.change_state(
-                                "tools_state", tools_select=tools_select
+                        llmApikeyDdl = gr.Textbox(
+                            label="模型api-key",
+                            value=LLMConst.DEFAULT_API_KEY,
+                            type="password",
+                        )
+                        llmBaseurlTxt = gr.Textbox(
+                            label="模型baseurl",
+                            value=LLMConst.DEFAULT_BASE_URL,
+                            info="如使用Openai模型此栏请留空",
+                        )
+                        gr.on(
+                            [
+                                llmDdl.change,
+                                llmApikeyDdl.change,
+                                llmBaseurlTxt.change,
+                            ],
+                            lambda model, api_key, base_url: state.change_state(
+                                "llm_state",
+                                model=model,
+                                api_key=api_key,
+                                base_url=base_url,
                             ),
-                            inputs=[toolsDdl],
+                            inputs=[llmDdl, llmApikeyDdl, llmBaseurlTxt],
                         )
-                    with gr.Row():
-                        uploadFileBtn = gr.File(
-                            label="上传文件", file_types=[".pdf", ".docx"]
-                        )
-
-                    with gr.Row():
-                        cleanCacheBtn = gr.Button("清理所有缓存文件")
-                    with gr.Row():
-                        with gr.Accordion(label="模型设置"):
-                            llm_state = cast(
-                                LLMState, global_var.get_global_value("llm_state")
-                            )
-                            llmDdl = gr.Dropdown(
-                                choices=SUPPORT_LLMS,#type: ignore
-                                value=llm_state.model,
-                                label="大语言模型ID",
-                            )
-                            llmApikeyDdl = gr.Textbox(
-                                label="模型api-key",
-                                value=LLMConst.DEFAULT_API_KEY,
-                                type="password",
-                            )
-                            llmBaseurlTxt = gr.Textbox(
-                                label="模型baseurl",
-                                value=LLMConst.DEFAULT_BASE_URL,
-                                info="如使用Openai模型此栏请留空",
-                            )
-                            gr.on(
-                                [
-                                    llmDdl.change,
-                                    llmApikeyDdl.change,
-                                    llmBaseurlTxt.change,
-                                ],
-                                lambda model, api_key, base_url: state.change_state(
-                                    "llm_state",
-                                    model=model,
-                                    api_key=api_key,
-                                    base_url=base_url,
-                                ),
-                                inputs=[llmDdl, llmApikeyDdl, llmBaseurlTxt],
-                            )
                     with gr.Accordion(label="缓存设置"):
                         cache_config = cast(
                             dict[str, Any], global_var.get_global_value("cache_config")
@@ -281,50 +290,52 @@ def create_ui():
                     with gr.Accordion(label="搜索设置", open=False):
                         downloadChk = gr.Checkbox(
                             label="下载",
+                            value=WebSearchStateConst.DEFAULT_DOWNLOAD
+                        )
+                        downloadChk.change(
+                            lambda download: state.change_state('websearch_state', download=download),
+                            inputs=[downloadChk]
                         )
                     with gr.Accordion(label="RAG设置", open=False):
-                        retrieval_state = cast(
-                            RetrievalState, state.get_global_value("retrieval_state")
-                        )
                         temperatureSlider = gr.Slider(
                             label="temperature",
-                            minimum=RetrievalConst.MIN_TEMPERATURE,
-                            maximum=RetrievalConst.MAX_TEMPERATURE,
-                            value=RetrievalConst.DEFAULT_TEMPERATURE,
+                            minimum=RetrievalStateConst.MIN_TEMPERATURE,
+                            maximum=RetrievalStateConst.MAX_TEMPERATURE,
+                            value=RetrievalStateConst.DEFAULT_TEMPERATURE,
                             info=f"请在0至1之间选择",
                             interactive=True,
                         )
                         toppSlider = gr.Slider(
                             label="top_p",
-                            minimum=RetrievalConst.MIN_TOP_P,
-                            maximum=RetrievalConst.MAX_TOP_P,
-                            value=RetrievalConst.DEFAULT_TOP_P,
+                            minimum=RetrievalStateConst.MIN_TOP_P,
+                            maximum=RetrievalStateConst.MAX_TOP_P,
+                            value=RetrievalStateConst.DEFAULT_TOP_P,
                             step=0.01,
                             info=f"请在0至1之间选择",
                             interactive=True,
                         )
                         chunkSizeSlider = gr.Slider(
                             label="切片长度",
-                            minimum=RetrievalConst.MIN_CHUNK_SIZE,
-                            maximum=RetrievalConst.MAX_CHUNK_SIZE,
+                            minimum=RetrievalStateConst.MIN_CHUNK_SIZE,
+                            maximum=RetrievalStateConst.MAX_CHUNK_SIZE,
                             step=1,
-                            value=RetrievalConst.DEFAULT_CHUNK_SIZE,
+                            value=RetrievalStateConst.DEFAULT_CHUNK_SIZE,
                             info="选择每段被切割文案的长度",
                             interactive=True,
                         )
                         scoreThresholdSlider = gr.Slider(
                             label="分数阈值",
-                            minimum=RetrievalConst.MIN_SCORE_THRESHOLD,
-                            maximum=RetrievalConst.MAX_SCORE_THRESHOLD,
-                            value=RetrievalConst.DEFAULT_SCORE_THRESHOLD,
+                            minimum=RetrievalStateConst.MIN_SCORE_THRESHOLD,
+                            maximum=RetrievalStateConst.MAX_SCORE_THRESHOLD,
+                            value=RetrievalStateConst.DEFAULT_SCORE_THRESHOLD,
                             interactive=True,
                         )
                         chunkOverlapSlider = gr.Slider(
                             label="切片重叠部分长度",
-                            minimum=RetrievalConst.MIN_CHUNK_OVERLAP,
-                            maximum=RetrievalConst.MAX_CHUNK_OVERLAP,
+                            minimum=RetrievalStateConst.MIN_CHUNK_OVERLAP,
+                            maximum=RetrievalStateConst.MAX_CHUNK_OVERLAP,
                             step=50,
-                            value=RetrievalConst.DEFAULT_CHUNK_OVERLAP,
+                            value=RetrievalStateConst.DEFAULT_CHUNK_OVERLAP,
                             interactive=True,
                         )
                         gr.on(
@@ -352,21 +363,47 @@ def create_ui():
                             ],
                         )
 
-        with gr.Tab(label="缓存文章"):
+        with gr.Tab(label="本地数据库"):
             cache = load_cache()
-            dstCachedPapers = gr.Dataset(
-                components=[gr.Textbox(visible=False)],
-                label="缓存文章",
-                samples=[[i] for i in cache.all_files],
+            with gr.Row():
+                with gr.Column(scale=3):
+                    dstCachedPapers = gr.Dataset(
+                        components=[gr.Textbox(visible=False)],
+                        label="已存储的文章",
+                        samples=[[i] for i in cache.all_files],
+                    )
+                with gr.Column(scale=1):
+                    uploadFileBot = gr.File(
+                        label="上传文件",
+                        file_types=[".pdf", ".docx"],
+                        file_count="multiple",
+                    )
+                    cacheFilesDdl = gr.Dropdown(
+                        label="选择要从本地数据库中删除的文章",
+                        choices=cache.all_files,  # type:ignore
+                        multiselect=True,
+                    )
+                    delete_button = gr.Button("删除")
+                    cleanCacheBtn = gr.Button("删除全部")
+            delete_button.click(
+                fn=delete_files,
+                inputs=[cacheFilesDdl],
+                outputs=[cacheFilesDdl, dstCachedPapers],
             )
+            cleanCacheBtn.click(
+                delete_all_files, outputs=[cacheFilesDdl, dstCachedPapers]
+            )
+            uploadFileBot.upload(
+                upload, inputs=[uploadFileBot], outputs=[cacheFilesDdl, dstCachedPapers]
+            ).then(lambda: gr.update(value=None), outputs=[uploadFileBot])
         with gr.Tab(label="工作台"):
             pass
         with gr.Tab(label="PDF文档问答"):
             with gr.Row():
                 with gr.Column():
-                    pdfBox = PDF(label="PDF文档", height=1000)
+                    pdfBox = PDF(label="PDF文档", height=700)
                 with gr.Column():
-                    docChatbot = gr.Chatbot(label="问答记录", height=900)
+                    docChatbot = gr.Chatbot(label="问答记录", height=800)
                     docTxtbot = gr.Textbox(
                         label="用户对话框:", placeholder="在这里输入", lines=4
                     )
@@ -380,7 +417,7 @@ def create_ui():
             with gr.Row():
                 with gr.Column(scale=3):
                     multiModalChatbot = MultiModalChatbot(
-                        label="SciAgent-V", height=900
+                        label="SciAgent-V"
                     )
                     gr.Markdown(
                         "输入问题并上传图片后，点击提交开始视觉问答。注意：目前暂不支持多轮对话。"
@@ -435,37 +472,16 @@ def create_ui():
             show_progress="hidden",
         )
         timeStampDisp.change(_state_change, inputs=None, outputs=[modal, modalMsg])
-        uploadFileBtn.upload(
-            upload, inputs=[uploadFileBtn], outputs=[dstCachedPapers], queue=True
-        )
+
         changeCacheBtn.click(
             change_cache_config,
             inputs=[embDdl, namespaceTxt],
             outputs=[dstCachedPapers],
         )
-        cleanCacheBtn.click(clear_cache, inputs=[], outputs=[dstCachedPapers])
-
         submitBtn.click(
-            fn=add_input,
-            inputs=[chatbot, txtbot, audio],
-            outputs=[chatbot, txtbot, audio],
-        ).then(
             fn=submit,
-            inputs=[chatbot],
-            outputs=[chatbot],
-            show_progress="hidden",
-        ).then(
-            fn=lambda: [[i] for i in cache.all_files], outputs=[dstCachedPapers]
-        ).then(
-            fn=lambda: (
-                gr.Textbox(
-                    label="用户对话框:", interactive=True, placeholder="在这里输入"
-                ),
-                gr.Dropdown(interactive=True),
-                gr.Slider(interactive=True),
-            ),
-            inputs=None,
-            outputs=[txtbot, toolsDdl, temperatureSlider],
+            inputs=[chatbot, txtbot, audio],
+            outputs=[chatbot, txtbot, audio]
         )
         gr.on(
             [docTxtbot.submit, docSubmitBtn.click],

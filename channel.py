@@ -1,6 +1,7 @@
 from queue import Queue
 from typing import Literal, cast
 import time
+import json
 from global_var import *
 def load_channel():
     channel = cast(Channel, get_global_value('channel'))
@@ -35,3 +36,12 @@ class Channel(object):
             response = self.recv('back')
             time.sleep(delay)
         return response
+    def show_modal(self, name:Literal['info','error','warning'], message:str):
+        msg = json.dumps(
+            {
+                "type": "modal",
+                "name": name,
+                "message": message,
+            }
+        )
+        self.send(msg, this='back')

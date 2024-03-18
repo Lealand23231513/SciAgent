@@ -134,7 +134,7 @@ class Cache(object):
         )
         return self.vectorstore
 
-    def save_filenames(self):
+    def save_all_files(self):
         # save cached files' name
         with open(self.filenames_save_path, "w") as f:
             json.dump(self.all_files, f)
@@ -143,7 +143,7 @@ class Cache(object):
         # clear all cached data
         # TODO clear cached files
         self.all_files = []
-        self.save_filenames()
+        self.save_all_files()
         for file in self.cached_files_dir.iterdir():
             file.unlink()
         logger = logging.getLogger(Path(__file__).stem)
@@ -156,7 +156,6 @@ class Cache(object):
             source_id_key="source",
         )
         logger.info(res)
-        return res
 
     def cache_file(
         self,
@@ -212,7 +211,7 @@ class Cache(object):
             cleanup="incremental",
             source_id_key="source",
         )
-        self.save_filenames()
+        self.save_all_files()
         logger = logging.getLogger(Path(__file__).stem)
         logger.debug(f"all files:{self.all_files}")
         logger.info(index_res)
@@ -227,9 +226,6 @@ class Cache(object):
             self.vectorstore.delete(uids_to_delete)
             self.record_manager.delete_keys(uids_to_delete)
             num_deleted += len(uids_to_delete)
-            all_files_set = set(self.all_files)
-            all_files_set.discard(filename)
-            self.all_files = list(all_files_set)
             logger.info(f"The file ({filename}) has been deleted")
         delete_res = {
             "num_added": 0,
@@ -237,15 +233,8 @@ class Cache(object):
             "num_skipped": 0,
             "num_deleted": num_deleted,
         }
+        all_files_set = set(self.all_files)
+        all_files_set.discard(filename)
+        self.all_files = list(all_files_set)
+        self.save_all_files()
         logger.info(delete_res)
-        return delete_res
-
-    # def __deepcopy__(self, memo=None):
-    #     '''
-    #     Out of use
-    #     '''
-    #     from copy import deepcopy
-    #     newCache = Cache(
-    #         all_files=deepcopy(self.all_files)
-    #         )
-    #     return newCache

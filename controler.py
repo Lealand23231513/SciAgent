@@ -128,30 +128,16 @@ def call_agent(user_input: str, stream: bool = False):
             return ans["output"]
     except APIError as e:
         channel = load_channel()
-        msg = json.dumps(
-            {
-                "type": "modal",
-                "name": "error",
-                "message": e.message,
-            }
-        )
+        channel.show_modal('error', repr(e.message))
         logger.error(e.message)
-        channel.send(msg, this='back')
         if stream:
             yield from repr(e)
         else:
             return repr(e)
     except Exception as e:
         channel = load_channel()
-        msg = json.dumps(
-            {
-                "type": "modal",
-                "name": "error",
-                "message": repr(e),
-            }
-        )
+        channel.show_modal('error', repr(e))
         logger.error(repr(e))
-        channel.send(msg, this='back')
         if stream:
             yield from repr(e)
         else:

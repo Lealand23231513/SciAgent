@@ -18,9 +18,11 @@ class BaseToolState(BaseState, abc.ABC):
     def instance(self) -> BaseTool:
         """The instance of the BaseTool."""
 
+class WebSearchStateConst():
+    DEFAULT_DOWNLOAD = False
 
 class WebSearchState(BaseToolState):
-    download: bool = False
+    download: bool = WebSearchStateConst.DEFAULT_DOWNLOAD
 
     @property
     def instance(self) -> BaseTool:
@@ -28,7 +30,7 @@ class WebSearchState(BaseToolState):
         return get_google_scholar_search_tool(**kwargs)
 
 
-class RetrievalConst:
+class RetrievalStateConst:
     MAX_TEMPERATURE = 1
     MIN_TEMPERATURE = 0
     DEFAULT_TEMPERATURE = 0.5
@@ -48,29 +50,29 @@ class RetrievalConst:
 
 class RetrievalState(BaseToolState):
     temperature: float = Field(
-        default=RetrievalConst.DEFAULT_TEMPERATURE,
-        ge=RetrievalConst.MIN_TEMPERATURE,
-        le=RetrievalConst.MAX_TEMPERATURE,
+        default=RetrievalStateConst.DEFAULT_TEMPERATURE,
+        ge=RetrievalStateConst.MIN_TEMPERATURE,
+        le=RetrievalStateConst.MAX_TEMPERATURE,
     )
     top_p: float = Field(
-        default=RetrievalConst.DEFAULT_TOP_P,
-        ge=RetrievalConst.MIN_TOP_P,
-        le=RetrievalConst.MAX_TOP_P,
+        default=RetrievalStateConst.DEFAULT_TOP_P,
+        ge=RetrievalStateConst.MIN_TOP_P,
+        le=RetrievalStateConst.MAX_TOP_P,
     )
     chunk_size: int = Field(
-        default=RetrievalConst.DEFAULT_CHUNK_SIZE,
-        ge=RetrievalConst.MIN_CHUNK_SIZE,
-        le=RetrievalConst.MAX_CHUNK_SIZE,
+        default=RetrievalStateConst.DEFAULT_CHUNK_SIZE,
+        ge=RetrievalStateConst.MIN_CHUNK_SIZE,
+        le=RetrievalStateConst.MAX_CHUNK_SIZE,
     )
     score_threshold: float = Field(
-        default=RetrievalConst.DEFAULT_SCORE_THRESHOLD,
-        ge=RetrievalConst.MIN_SCORE_THRESHOLD,
-        le=RetrievalConst.MAX_SCORE_THRESHOLD,
+        default=RetrievalStateConst.DEFAULT_SCORE_THRESHOLD,
+        ge=RetrievalStateConst.MIN_SCORE_THRESHOLD,
+        le=RetrievalStateConst.MAX_SCORE_THRESHOLD,
     )
     chunk_overlap: int = Field(
-        default=RetrievalConst.DEFAULT_CHUNK_OVERLAP,
-        ge=RetrievalConst.MIN_CHUNK_OVERLAP,
-        le=RetrievalConst.MAX_CHUNK_OVERLAP,
+        default=RetrievalStateConst.DEFAULT_CHUNK_OVERLAP,
+        ge=RetrievalStateConst.MIN_CHUNK_OVERLAP,
+        le=RetrievalStateConst.MAX_CHUNK_OVERLAP,
     )
 
     @property
