@@ -1,7 +1,5 @@
 import gradio as gr
 import logging
-import annotated_types
-from sklearn import base
 from controler import call_agent
 from pathlib import Path
 from dotenv import load_dotenv
@@ -25,7 +23,7 @@ from gradio_mchatbot import MultiModalChatbot
 import numpy as np
 from PIL import Image
 from multimodal import multimodal_chat
-from llm_state import LLMState
+from llm_state import LLMState, LLMConst
 from tools import RetrievalState, ToolsState, WebSearchState, RetrievalConst
 
 
@@ -179,7 +177,7 @@ def create_ui():
                 }
         if _state['type'] == 'modal':
             if _state['name'] == 'error':
-                gr.Error(cast(str, _state['message']))
+                raise gr.Error(cast(str, _state['message']))
             if _state['name'] == 'info':
                 gr.Info(cast(str, _state['message']))
         return {modal: Modal(visible=False), modalMsg: ""}
@@ -240,12 +238,12 @@ def create_ui():
                             )
                             llmApikeyDdl = gr.Textbox(
                                 label="模型api-key",
-                                value=llm_state.api_key,
+                                value=LLMConst.DEFAULT_API_KEY,
                                 type="password",
                             )
                             llmBaseurlTxt = gr.Textbox(
                                 label="模型baseurl",
-                                value=llm_state.base_url,
+                                value=LLMConst.DEFAULT_BASE_URL,
                                 info="如使用Openai模型此栏请留空",
                             )
                             gr.on(
@@ -495,7 +493,7 @@ def create_ui():
     return demo
 
 
-# 启动Gradio界面
+# Launch gradio UI
 def main():
     load_dotenv()
     global_var._init()

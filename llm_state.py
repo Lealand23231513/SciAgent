@@ -6,11 +6,13 @@ from pydantic import model_validator
 class LLMConst():
     DEFAULT_LLM=SUPPORT_LLMS[0]
     LLM_CHOICES=SUPPORT_LLMS
+    DEFAULT_API_KEY=None
+    DEFAULT_BASE_URL=None
 
 class LLMState(BaseState):
     model: str = LLMConst.DEFAULT_LLM
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
+    api_key: Optional[str] = LLMConst.DEFAULT_API_KEY
+    base_url: Optional[str] = LLMConst.DEFAULT_BASE_URL
 
     @model_validator(mode="after")
     def validate_environ(cls, values):

@@ -9,7 +9,7 @@ from langchain_community.adapters.openai import convert_dict_to_message
 from langchain import hub
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
-from openai import APIStatusError
+from openai import APIError, APIStatusError, OpenAIError, APIConnectionError
 from global_var import get_global_value, set_global_value
 from langchain.agents.format_scratchpad.openai_tools import (
     format_to_openai_tool_messages,
@@ -126,7 +126,22 @@ def call_agent(user_input: str, stream: bool = False):
             yield from ans["output"]
         else:
             return ans["output"]
-    except APIStatusError as e:
+    except APIError as e:
+        channel = load_channel()
+        msg = json.dumps(
+            {
+                "type": "modal",
+                "name": "error",
+                "message": e.message,
+            }
+        )
+        logger.error(e.message)
+        channel.send(msg, this='back')
+        if stream:
+            yield from repr(e)
+        else:
+            return repr(e)
+    except Exception as e:
         channel = load_channel()
         msg = json.dumps(
             {
@@ -135,8 +150,9 @@ def call_agent(user_input: str, stream: bool = False):
                 "message": repr(e),
             }
         )
+        logger.error(repr(e))
         channel.send(msg, this='back')
         if stream:
-            yield from f"An error raised: {repr(e)}"
+            yield from repr(e)
         else:
-            return f"An error raised: {repr(e)}"
+            return repr(e)

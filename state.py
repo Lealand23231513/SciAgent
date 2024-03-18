@@ -48,6 +48,7 @@ def change_state(name: str, **kwargs):
     """
     :param name: name of the gradio state var
     """
+    logger.debug(kwargs)
     if get_global_value(name):
         curr_state = get_global_value(name)
         if isinstance(curr_state, BaseState) == False:
