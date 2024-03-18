@@ -13,6 +13,7 @@ from langchain.chains import LLMChain
 import logging
 from pathlib import Path
 from pydantic.v1.config import Extra
+from pydantic import BaseModel, model_validator, root_validator, validator
 import os
 import logging
 from pathlib import Path
@@ -43,6 +44,7 @@ from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.tools import BaseTool
 from langchain.chains.llm import LLMChain
 from types import MethodType
+from global_var import *
 logger = logging.getLogger(Path(__file__).stem)
 
 
@@ -196,8 +198,8 @@ keyword1,keyword2,...
         raise Exception('response.choices[0].message.content is None')
     return keywords
 
-def load_qwen_agent_executor(tools_inst:list[BaseTool], model:str):
-    llm = ChatOpenAI(model=model, temperature=0, api_key="EMPTY", base_url="http://127.0.0.1:5000/v1")#type:ignore
+def load_qwen_agent_executor(tools_inst:list[BaseTool], model:str, api_key=None, base_url=None):
+    llm = ChatOpenAI(model=model, temperature=0, api_key="EMPTY", base_url=base_url)#type:ignore
     if len(tools_inst)==0:
         llm_with_tools = llm
     else:

@@ -134,7 +134,7 @@ class GoogleScholarQueryRun(BaseTool):
 
 def get_google_scholar_search_tool(**kwargs) -> BaseTool:
     cls_properties = GoogleScholarWrapper.schema()['properties'].keys()
-    sub_kwargs = {k: kwargs[k] for k in cls_properties if k in kwargs.keys()}
+    sub_kwargs = {k: kwargs[k] for k in cls_properties if k in kwargs}
     return GoogleScholarQueryRun(api_wrapper=GoogleScholarWrapper(**sub_kwargs))
 
 

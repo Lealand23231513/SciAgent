@@ -1,32 +1,39 @@
 # 核心控制模块
-from typing import Mapping
+from typing import cast
 import os
 import logging
+import json
 from pathlib import Path
 from dotenv import load_dotenv
 from langchain_community.adapters.openai import convert_dict_to_message
 from langchain import hub
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
-from global_var import set_global_value
+from openai import APIStatusError
+from global_var import get_global_value, set_global_value
 from langchain.agents.format_scratchpad.openai_tools import (
     format_to_openai_tool_messages,
 )
 from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
 from langchain.agents import AgentExecutor
 from langchain_zhipu import ChatZhipuAI
-from functools import partial
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from utils import load_qwen_agent_executor
-from tools import TOOLS_MAPPING
+from tools import ToolsState
+from llm_state import LLMState
+from channel import load_channel
+
 logger = logging.getLogger(Path(__file__).stem)
 
-def load_openai_agent_excutor(tools_inst:list[BaseTool], model='gpt-3.5-turbo'):
-    llm = ChatOpenAI(model=model, temperature=0, api_key=os.getenv('OPENAI_API_KEY'))# type:ignore
-    if len(tools_inst)==0:
+
+def load_openai_agent_excutor(
+    tools_inst: list[BaseTool], model="gpt-3.5-turbo", api_key=None, base_url=None
+):
+    llm = ChatOpenAI(model=model, temperature=0, api_key=api_key, base_url=base_url)
+    if len(tools_inst) == 0:
         llm_with_tools = llm
     else:
-        llm_with_tools = llm.bind_tools(tools_inst,tool_choice='auto')
+        llm_with_tools = llm.bind_tools(tools_inst, tool_choice="auto")
     prompt = hub.pull("hwchase17/openai-tools-agent")
     agent = (
         {
@@ -39,22 +46,22 @@ def load_openai_agent_excutor(tools_inst:list[BaseTool], model='gpt-3.5-turbo'):
         | llm_with_tools
         | OpenAIToolsAgentOutputParser()
     )
-    agent_executor = AgentExecutor(agent=agent, #type: ignore
-                                   tools=tools_inst, handle_parsing_errors=True)
+    agent_executor = AgentExecutor(
+        agent=agent, tools=tools_inst, handle_parsing_errors=True  # type: ignore
+    )
     return agent_executor
 
-def load_zhipuai_agent_excutor(tools_inst:list[BaseTool], model='glm-3-turbo'):
-    if model=='chatglm3-6b':
-        base_url = os.getenv('CHATGLM3_BASE_URL')
+
+def load_zhipuai_agent_excutor(
+    tools_inst: list[BaseTool], model="glm-3-turbo", api_key=None, base_url=None
+):
+    if model == "chatglm3-6b":
         api_key = "EMP.TY"
-    else:
-        base_url = os.getenv('ZHIPUAI_BASE_URL')
-        api_key = os.getenv('ZHIPUAI_API_KEY')
     llm = ChatZhipuAI(model=model, temperature=0.01, api_key=api_key, base_url=base_url)
-    if len(tools_inst)==0:
+    if len(tools_inst) == 0:
         llm_with_tools = llm
     else:
-        llm_with_tools = llm.bind_tools(tools_inst,tool_choice='auto')
+        llm_with_tools = llm.bind_tools(tools_inst, tool_choice="auto")
     prompt = ChatPromptTemplate.from_messages(
         [
             (
@@ -76,36 +83,60 @@ def load_zhipuai_agent_excutor(tools_inst:list[BaseTool], model='glm-3-turbo'):
         | llm_with_tools
         | OpenAIToolsAgentOutputParser()
     )
-    agent_executor = AgentExecutor(agent=agent, #type: ignore
-                                   tools=tools_inst, handle_parsing_errors=True)
+    agent_executor = AgentExecutor(
+        agent=agent, tools=tools_inst, handle_parsing_errors=True  # type: ignore
+    )
     return agent_executor
 
 
-def call_agent(user_input:str, history:list[Mapping[str,str]], tools_choice:list, model:str, retrieval_temp:float, stream:bool = False):
+def call_agent(user_input: str, stream: bool = False):
     load_dotenv()
-    
-    tools_inst = [TOOLS_MAPPING[tool['name']](**tool['kwargs']) for tool in tools_choice]
+    llm_state = cast(LLMState, get_global_value("llm_state"))
+    tools_state = cast(ToolsState, get_global_value("tools_state"))
     agent_excutor_mapping = {
         "openai": load_openai_agent_excutor,
         "zhipuai": load_zhipuai_agent_excutor,
         "qwen": load_qwen_agent_executor,
     }
-    if 'gpt' in model:
-        agent_executor = agent_excutor_mapping['openai'](tools_inst, model)
-    elif 'glm' in model:
-        agent_executor = agent_excutor_mapping['zhipuai'](tools_inst, model)
-    elif 'qwen' in model:
-        agent_executor = agent_excutor_mapping['qwen'](tools_inst, model)
-    set_global_value('agent_executor', agent_executor)
-    ans = agent_executor.invoke(
-        {
-            "chat_history":[convert_dict_to_message(m) for m in history],
-            "input": user_input
-        }
-    )
-    logger.info({k:ans[k] for k in ('input', 'output')})
-    if stream:
-        # fake stream
-        yield from ans['output']
-    else:
-        return ans['output']
+    model_kwargs = llm_state.model_dump()
+    if "gpt" in llm_state.model:
+        agent_executor = agent_excutor_mapping["openai"](
+            tools_state.tools_inst, **model_kwargs
+        )
+    elif "glm" in llm_state.model:
+        agent_executor = agent_excutor_mapping["zhipuai"](
+            tools_state.tools_inst, **model_kwargs
+        )
+    elif "qwen" in llm_state.model:
+        agent_executor = agent_excutor_mapping["qwen"](
+            tools_state.tools_inst, **model_kwargs
+        )
+    set_global_value("agent_executor", agent_executor)
+    chat_history = cast(list[dict[str, str]], get_global_value("chat_history"))
+    try:
+        ans = agent_executor.invoke(
+            {
+                "chat_history": [convert_dict_to_message(m) for m in chat_history],
+                "input": user_input,
+            }
+        )
+        logger.info({k: ans[k] for k in ("input", "output")})
+        if stream:
+            # fake stream
+            yield from ans["output"]
+        else:
+            return ans["output"]
+    except APIStatusError as e:
+        channel = load_channel()
+        msg = json.dumps(
+            {
+                "type": "modal",
+                "name": "error",
+                "message": repr(e),
+            }
+        )
+        channel.send(msg, this='back')
+        if stream:
+            yield from f"An error raised: {repr(e)}"
+        else:
+            return f"An error raised: {repr(e)}"

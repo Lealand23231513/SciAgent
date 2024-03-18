@@ -1,5 +1,5 @@
 DEFAULT_CACHE_DIR = ".cache"
-TOOLS_LIST = ['websearch', 'retrieval']
+SUPPORT_TOOLS = ['websearch', 'retrieval']
 SUPPORT_LLMS = [
     'gpt-3.5-turbo',
     'chatglm3-6b',
