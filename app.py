@@ -2,7 +2,9 @@ from tkinter.font import names
 import gradio as gr
 import logging
 
-from controler import call_agent
+from numpy import isin
+
+from controler import call_agent, AGENT_DONE
 from pathlib import Path
 from dotenv import load_dotenv
 import os
@@ -42,6 +44,7 @@ from tools import (
     WebSearchStateConst,
 )
 from retrieval_qa import RetrievalState, RetrievalStateConst
+from gradio_rich_textbox import RichTextbox
 
 
 def _init_state_vars():
@@ -65,22 +68,31 @@ def wav2txt(path: str, lang: str = "chinese"):
     return result["text"]
 
 
-def submit(chatbot, user_input, user_input_wav):
+def submit(chatbot, user_input, user_input_wav, exe_log: str | None):
     state.StateMutex.set_state_mutex(True)
     chat_history = cast(list, global_var.get_global_value("chat_history"))
     chat_history.append({"role": "user", "content": f"{user_input}"})
     if user_input_wav:
         user_input = wav2txt(user_input_wav)
+    if isinstance(exe_log, str) == False:
+        exe_log = ""
     chatbot.append((user_input, None))
-    yield chatbot, None, None
-    full_response = ""
-    for ai_response in call_agent(
+    yield chatbot, None, None, exe_log
+    res = None
+    exe_log = cast(str, exe_log)
+    generator = call_agent(
         user_input,
         stream=True,
-    ):
-        full_response += str(ai_response)
-        chatbot[-1] = (chatbot[-1][0], full_response)
-        yield chatbot, None, None
+    )
+    full_response = ""
+    for ai_response in generator:
+        print(ai_response)
+        ai_response = cast(str, ai_response)
+        exe_log += ai_response + "\n"
+        if ai_response == AGENT_DONE:
+            full_response = next(generator)
+            chatbot[-1] = (chatbot[-1][0], full_response)
+        yield chatbot, None, None, exe_log
     chat_history.append({"role": "assistant", "content": f"{full_response}"})
     logger.info("submit end")
     state.StateMutex.set_state_mutex(False)
@@ -322,7 +334,7 @@ def create_ui():
                     chatbot = gr.Chatbot(label="SciAgent")
                     with gr.Row():
                         txtbot = gr.Textbox(
-                            label="用户对话框:",
+                            label="用户对话框",
                             placeholder="在这里输入",
                             lines=8,
                             scale=3,
@@ -339,6 +351,11 @@ def create_ui():
                         clearBtn.click(
                             fn=lambda: global_var.set_global_value("chat_history", [])
                         )
+                    exeLogMkd = gr.Textbox(
+                        label="Agent执行记录",
+                        value="\n",
+                        # interactive=False
+                    )
                 with gr.Column(scale=1):
                     tools_state = cast(
                         ToolsState, global_var.get_global_value("tools_state")
@@ -450,9 +467,44 @@ def create_ui():
                         components=[gr.Textbox(visible=False)],
                         label="已存储的文章",
                         # samples=[[i] for i in cache.all_files],
-                        samples=[]
+                        samples=[],
                     )
                 with gr.Column(scale=1):
+                    with gr.Accordion(label="新建知识库", open=False):
+                        newNamespaceTxt = gr.Textbox(
+                            label="知识库名称",
+                            info="名称应为3-63个字母或者数字组成的字符串",
+                        )
+                        newEmbDdl = gr.Dropdown(
+                            choices=EMBStateConst.EMB_CHOICES,  # type:ignore
+                            multiselect=False,
+                            label="Embedding模型",
+                        )
+                        newEmbApiKeyDdl = gr.Textbox(
+                            label="模型api-key",
+                            value=EMBStateConst.DEFAULT_API_KEY,
+                            type="password",
+                        )
+                        newEmbBaseurlTxt = gr.Textbox(
+                            label="模型baseurl",
+                            value=EMBStateConst.DEFAULT_BASE_URL,
+                            info="如使用Openai模型此栏请留空",
+                        )
+                        newCacheButton = gr.Button(value="新建本地知识库")
+                        gr.on(
+                            [
+                                newEmbDdl.change,
+                                newEmbApiKeyDdl.change,
+                                newEmbBaseurlTxt.change,
+                            ],
+                            lambda model, api_key, base_url: state.change_state(
+                                "emb_state",
+                                model=model,
+                                api_key=api_key,
+                                base_url=base_url,
+                            ),
+                            inputs=[newEmbDdl, newEmbApiKeyDdl, newEmbBaseurlTxt],
+                        )
                     currNamespaceTxt = gr.Textbox(
                         label="当前知识库",
                         # value=cache.namespace,
@@ -514,41 +566,6 @@ def create_ui():
                             inputs=[uploadFileBot],
                             outputs=[cacheFilesDdl, dstCachedPapers],
                         ).then(lambda: gr.update(value=None), outputs=[uploadFileBot])
-                    with gr.Accordion(label="新建知识库", open=False):
-                        newNamespaceTxt = gr.Textbox(
-                            label="知识库名称",
-                            info="名称应为3-63个字母或者数字组成的字符串",
-                        )
-                        newEmbDdl = gr.Dropdown(
-                            choices=EMBStateConst.EMB_CHOICES,  # type:ignore
-                            multiselect=False,
-                            label="Embedding模型",
-                        )
-                        newEmbApiKeyDdl = gr.Textbox(
-                            label="模型api-key",
-                            value=EMBStateConst.DEFAULT_API_KEY,
-                            type="password",
-                        )
-                        newEmbBaseurlTxt = gr.Textbox(
-                            label="模型baseurl",
-                            value=EMBStateConst.DEFAULT_BASE_URL,
-                            info="如使用Openai模型此栏请留空",
-                        )
-                        newCacheButton = gr.Button(value="新建本地知识库")
-                        gr.on(
-                            [
-                                newEmbDdl.change,
-                                newEmbApiKeyDdl.change,
-                                newEmbBaseurlTxt.change,
-                            ],
-                            lambda model, api_key, base_url: state.change_state(
-                                "emb_state",
-                                model=model,
-                                api_key=api_key,
-                                base_url=base_url,
-                            ),
-                            inputs=[newEmbDdl, newEmbApiKeyDdl, newEmbBaseurlTxt],
-                        )
 
                     with gr.Accordion(label="更改知识库", open=False):
                         cacheNameDdl = gr.Dropdown(
@@ -581,6 +598,12 @@ def create_ui():
                     )
                     deleteCacheBtn.click(
                         delete_cache, inputs=[cacheNameDdl], outputs=[cacheNameDdl]
+                    )
+                    submitBtn.click(
+                        fn=submit,
+                        inputs=[chatbot, txtbot, audio, exeLogMkd],
+                        outputs=[chatbot, txtbot, audio, exeLogMkd],
+                        scroll_to_output=True,
                     )
 
         # with gr.Tab(label="工作台"):
@@ -730,9 +753,6 @@ def create_ui():
             show_progress="hidden",
         )
         timeStampDisp.change(_state_change, inputs=None, outputs=[modal, modalMsg])
-        submitBtn.click(
-            fn=submit, inputs=[chatbot, txtbot, audio], outputs=[chatbot, txtbot, audio]
-        )
         gr.on(
             [docTxtbot.submit, docSubmitBtn.click],
             fn=chat_with_document,

@@ -22,7 +22,9 @@ from utils import load_qwen_agent_executor
 from tools import ToolsState
 from model_state import LLMState
 from channel import load_channel
-
+AGENT_START = '[AGENT START]'
+AGENT_DONE = '[AGENT DONE]'
+SEP_OF_LINE = "".join(["-" for _ in range(8)])
 logger = logging.getLogger(Path(__file__).stem)
 
 
@@ -114,31 +116,48 @@ def call_agent(user_input: str, stream: bool = False):
     set_global_value("agent_executor", agent_executor)
     chat_history = cast(list[dict[str, str]], get_global_value("chat_history"))
     try:
-        ans = agent_executor.invoke(
+        yield AGENT_START
+        yield SEP_OF_LINE
+        for chunk in agent_executor.stream(
             {
                 "chat_history": [convert_dict_to_message(m) for m in chat_history],
                 "input": user_input,
             }
-        )
-        logger.info({k: ans[k] for k in ("input", "output")})
-        if stream:
-            # fake stream
-            yield from ans["output"]
-        else:
-            return ans["output"]
+        ):
+            # Agent Action
+            if "actions" in chunk:
+                for action in chunk["actions"]:
+                    yield f"Calling Tool:`{action.tool}` with input `{action.tool_input}`"
+            # Observation
+            elif "steps" in chunk:
+                for step in chunk["steps"]:
+                    yield f"Tool Result:`{step.observation}`"
+            # Final result
+            elif "output" in chunk:
+                result = chunk["output"]
+                yield f'Final Output: {chunk["output"]}'
+            else:
+                raise ValueError()
+            yield SEP_OF_LINE
+        yield AGENT_DONE
+        yield result
     except APIError as e:
         channel = load_channel()
-        channel.show_modal('error', repr(e.message))
+        channel.show_modal("error", repr(e.message))
         logger.error(e.message)
-        if stream:
-            yield from repr(e)
-        else:
-            return repr(e)
+        yield AGENT_DONE
+        yield repr(e)
+        # if stream:
+        #     yield from repr(e)
+        # else:
+        #     return repr(e)
     except Exception as e:
         channel = load_channel()
-        channel.show_modal('error', repr(e))
+        channel.show_modal("error", repr(e))
         logger.error(repr(e))
-        if stream:
-            yield from repr(e)
-        else:
-            return repr(e)
+        yield AGENT_DONE
+        yield repr(e)
+        # if stream:
+        #     yield from repr(e)
+        # else:
+        #     return repr(e)
