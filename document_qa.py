@@ -59,8 +59,9 @@ def document_qa_fn(path: str, query: str) -> str:
         template=prompt_template_stuff,
         input_variables=["context", "question"],
     )
+    llm = ChatOpenAI(temperature=0.1, model="gpt-3.5-turbo-0125")
     chain = load_qa_chain(
-        llm=ChatOpenAI(temperature=0.1, max_tokens=1000, model="gpt-3.5-turbo-0125"),
+        llm=llm,
         chain_type="stuff",
         prompt=prompt,
     )

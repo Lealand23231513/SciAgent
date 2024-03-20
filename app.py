@@ -1,5 +1,7 @@
+from tkinter.font import names
 import gradio as gr
 import logging
+
 from controler import call_agent
 from pathlib import Path
 from dotenv import load_dotenv
@@ -8,7 +10,14 @@ from config import *
 from gradio_mchatbot import MultiModalChatbot
 from typing import Any, Optional, cast, Generator
 import global_var
-from cache import init_cache, load_cache
+from cache import (
+    init_cache,
+    load_cache,
+    create_new_cache,
+    Cache,
+    CacheConst,
+    change_running_cache,
+)
 from channel import load_channel
 import json
 import time
@@ -44,13 +53,39 @@ def _init_state_vars():
     global_var.set_global_value("tools_state", ToolsState())
     global_var.set_global_value("chat_history", [])
 
+def wav2txt(path: str, lang: str = "chinese"):
+    model = wenet.load_model(lang)
+    result = model.transcribe(path)
+    return result["text"]
+
+
+def submit(chatbot, user_input, user_input_wav):
+    state.StateMutex.set_state_mutex(True)
+    chat_history = cast(list, global_var.get_global_value("chat_history"))
+    chat_history.append({"role": "user", "content": f"{user_input}"})
+    if user_input_wav:
+        user_input = wav2txt(user_input_wav)
+    chatbot.append((user_input, None))
+    yield chatbot, None, None
+    full_response = ""
+    for ai_response in call_agent(
+        user_input,
+        stream=True,
+    ):
+        full_response += str(ai_response)
+        chatbot[-1] = (chatbot[-1][0], full_response)
+        yield chatbot, None, None
+    chat_history.append({"role": "assistant", "content": f"{full_response}"})
+    logger.info("submit end")
+    state.StateMutex.set_state_mutex(False)
+
 
 def vqa_chat(history: list, user_input: Optional[str], img_path: Optional[str]):
     state.StateMutex.set_state_mutex(True)
     if img_path:
         user_message = [user_input, {"type": "file", "filepath": img_path}]
     else:
-        user_message=[user_input]
+        user_message = [user_input]
     history.append([user_message, None])
     yield history, gr.update(interactive=False)
     stream_response = multimodal_chat(user_message, stream=True)
@@ -85,10 +120,10 @@ def chat_with_document(filepath: str, question: str, chat_history: list):
 def delete_all_files():
     cache = load_cache()
     cache.clear_all()
-    gr.Info(f"所有缓存文件已被清除。")
+    gr.Info(f"所有文章都已被删除")
     return (
         gr.Dropdown(
-            label="选择要从本地数据库中删除的文章",
+            label="选择要从本地知识库中删除的文章",
             choices=cache.all_files,  # type:ignore
             interactive=True,
         ),
@@ -98,62 +133,81 @@ def delete_all_files():
 
 def delete_files(filenames: list[str]):
     cache = load_cache()
+    if isinstance(filenames, list) == False:
+        gr.Info("请选择要删除的文章")
+        filenames=[]
     for filename in filenames:
         cache.delete_file(filename)
         gr.Info(f"文件 ({filename})已经被删除")
-    logger.info(cache.all_files)
-    return gr.Dropdown(
-        label="选择要从本地数据库中删除的文章",
+    logger.debug(cache.all_files)
+    return gr.update(
         choices=cache.all_files,  # type:ignore
-        interactive=True,
     ), [[i] for i in cache.all_files]
 
 
 def upload(files: list[str]):
+    cache_config = cast(dict[str, str], global_var.get_global_value("cache_config"))
     cache = load_cache()
     logger.info(files)
     for filepath in files:
         cache.cache_file(filepath, save_local=True)
         gr.Info(f"文件 {Path(filepath).name} 上传成功!")
 
-    return gr.Dropdown(
-        label="选择要从本地数据库中删除的文章",
+    return gr.update(
         choices=cache.all_files,  # type:ignore
-        interactive=True,
     ), [[i] for i in cache.all_files]
 
 
-def change_cache_config(emb_model: str, namespace: str):
-    cache = init_cache(namespace=namespace, emb_model_name=emb_model)
-    gr.Info("成功更改缓存设置")
-    return [[i] for i in cache.all_files]
+def create_cache(namespace: str, emb_model_name: str):
+    valid = True
+    if isinstance(namespace, str) == False or namespace == "":
+        gr.Info("请输入知识库的名字")
+        valid = False
+    if isinstance(emb_model_name, str) == False or emb_model_name == "":
+        gr.Info("请选择Embbeding模型")
+        valid = False
+    if valid == False:
+        return gr.update(), gr.update(), gr.update()
+    cache_lst: list[str] = global_var.get_global_value("cache_lst")
+    if namespace in cache_lst:
+        gr.Warning(f"知识库“{namespace}”已经存在，故无法创建")
+        cache = load_cache(namespace)
+    else:
+        cache = Cache(namespace=namespace, emb_model_name=emb_model_name)
+        gr.Info(f"新的知识库“{namespace}”创建成功")
+    return (
+        gr.update(value=None),
+        gr.update(value=None),
+        gr.update(value=None, choices=cache_lst),
+    )
 
 
-def wav2txt(path: str, lang: str = "chinese"):
-    model = wenet.load_model(lang)
-    result = model.transcribe(path)
-    return result["text"]
+def change_cache(namespace: str):
+    if isinstance(namespace, str)==False:
+        raise gr.Error("请选择知识库！")
+    cache = change_running_cache(namespace)
+    gr.Info("成功更改本地知识库设置")
+    return (
+        gr.update(value=cache.namespace),
+        gr.update(value=cache.emb_model_name),
+        gr.update(value=None, choices=cache.all_files),
+        [[i] for i in cache.all_files],
+    )
 
 
-def submit(chatbot, user_input, user_input_wav):
-    state.StateMutex.set_state_mutex(True)
-    chat_history = cast(list, global_var.get_global_value("chat_history"))
-    chat_history.append({"role": "user", "content": f"{user_input}"})
-    if user_input_wav:
-        user_input = wav2txt(user_input_wav)
-    chatbot.append((user_input, None))
-    yield chatbot, None, None
-    full_response = ""
-    for ai_response in call_agent(
-        user_input,
-        stream=True,
-    ):
-        full_response += str(ai_response)
-        chatbot[-1] = (chatbot[-1][0], full_response)
-        yield chatbot, None, None
-    chat_history.append({"role": "assistant", "content": f"{full_response}"})
-    logger.info("submit end")
-    state.StateMutex.set_state_mutex(False)
+def delete_cache(namespace: str):
+    cache: Cache = global_var.get_global_value("cache")
+    if cache.namespace == namespace:
+        gr.Info("无法删除正在使用的本地知识库")
+        return gr.update()
+    elif isinstance(namespace,str):
+        cache = load_cache(namespace=namespace)
+        cache.delete_cache()
+        cache_lst: list[str] = global_var.get_global_value("cache_lst")
+        gr.Info(f"成功删除本地知识库{namespace}")
+        return gr.update(value=None, choices=cache_lst)
+    else:
+        raise gr.Error("请选择知识库！")
 
 
 def confirmBtn_click():
@@ -184,6 +238,7 @@ def get_timestamp():
     return _timestamp
 
 
+
 def create_ui():
     def _state_change():
         global _state
@@ -198,7 +253,21 @@ def create_ui():
                 raise gr.Error(cast(str, _state["message"]))
             if _state["name"] == "info":
                 gr.Info(cast(str, _state["message"]))
+            if _state["name"] == "warning":
+                gr.Warning(cast(str, _state["message"]))
         return {modal: Modal(visible=False), modalMsg: ""}
+    
+    def load_demo():
+        cache: Cache = global_var.get_global_value("cache")
+        cache_lst:list[str] = global_var.get_global_value('cache_lst')
+        # chat_history: list = gl
+        return {
+            dstCachedPapers:[[i] for i in cache.all_files],
+            cacheFilesDdl: gr.update(value=None, choices=cache.all_files),
+            cacheNameDdl: gr.update(value=cache.namespace, choices=cache_lst),
+            currEmbTxt: cache.emb_model_name,
+            currNamespaceTxt: cache.namespace
+        }
 
     with gr.Blocks(title="SciAgent", theme="soft") as demo:
         with gr.Tab(label="问答"):
@@ -275,24 +344,6 @@ def create_ui():
                             ),
                             inputs=[llmDdl, llmApikeyDdl, llmBaseurlTxt],
                         )
-                    with gr.Accordion(label="缓存设置"):
-                        cache_config = cast(
-                            dict[str, Any], global_var.get_global_value("cache_config")
-                        )
-                        namespaceTxt = gr.Textbox(
-                            value=cast(str, cache_config["namespace"]),
-                            label="数据库名称",
-                        )
-                        embDdl = gr.Dropdown(
-                            choices=cast(
-                                list[str | int | float | tuple[str, str | int | float]]
-                                | None,
-                                SUPPORT_EMBS,
-                            ),
-                            value=cache_config["emb_model_name"],
-                            label="Embedding模型",
-                        )
-                        changeCacheBtn = gr.Button(value="切换本地数据库设置")
                     with gr.Accordion(label="搜索设置", open=False):
                         downloadChk = gr.Checkbox(
                             label="下载", value=WebSearchStateConst.DEFAULT_DOWNLOAD
@@ -370,39 +421,96 @@ def create_ui():
                             ],
                         )
 
-        with gr.Tab(label="本地数据库"):
+        with gr.Tab(label="本地知识库") as localKb:
             cache = load_cache()
+            cache_config = cast(
+                dict[str, Any], global_var.get_global_value("cache_config")
+            )
+            cache_lst = cast(list[str], global_var.get_global_value("cache_lst"))
             with gr.Row():
                 with gr.Column(scale=3):
                     dstCachedPapers = gr.Dataset(
                         components=[gr.Textbox(visible=False)],
-                        label="已存储的文章",
+                        label=f"已存储的文章",
                         samples=[[i] for i in cache.all_files],
                     )
                 with gr.Column(scale=1):
-                    uploadFileBot = gr.File(
-                        label="上传文件",
-                        file_types=[".pdf", ".docx"],
-                        file_count="multiple",
+                    currNamespaceTxt = gr.Textbox(
+                        label="当前知识库", value=cache.namespace, interactive=False
                     )
-                    cacheFilesDdl = gr.Dropdown(
-                        label="选择要从本地数据库中删除的文章",
-                        choices=cache.all_files,  # type:ignore
-                        multiselect=True,
+                    currEmbTxt = gr.Textbox(
+                        label="当前知识库使用的Embedding模型",
+                        value=cache.emb_model_name,
+                        interactive=False,
                     )
-                    delete_button = gr.Button("删除")
-                    cleanCacheBtn = gr.Button("删除全部")
-            delete_button.click(
-                fn=delete_files,
-                inputs=[cacheFilesDdl],
-                outputs=[cacheFilesDdl, dstCachedPapers],
-            )
-            cleanCacheBtn.click(
-                delete_all_files, outputs=[cacheFilesDdl, dstCachedPapers]
-            )
-            uploadFileBot.upload(
-                upload, inputs=[uploadFileBot], outputs=[cacheFilesDdl, dstCachedPapers]
-            ).then(lambda: gr.update(value=None), outputs=[uploadFileBot])
+                    with gr.Accordion(label="文件管理"):
+                        cacheFilesDdl = gr.Dropdown(
+                            label="选择要从本地知识库中删除的文章",
+                            choices=cache.all_files,  # type:ignore
+                            multiselect=True,
+                        )
+                        uploadFileBot = gr.File(
+                            label="上传文件",
+                            file_types=[".pdf", ".docx"],
+                            file_count="multiple",
+                        )
+                        delete_button = gr.Button("删除")
+                        cleanCacheBtn = gr.Button("删除全部")
+                        delete_button.click(
+                            fn=delete_files,
+                            inputs=[cacheFilesDdl],
+                            outputs=[cacheFilesDdl, dstCachedPapers],
+                        )
+                        cleanCacheBtn.click(
+                            delete_all_files, outputs=[cacheFilesDdl, dstCachedPapers]
+                        )
+                        uploadFileBot.upload(
+                            upload,
+                            inputs=[uploadFileBot],
+                            outputs=[cacheFilesDdl, dstCachedPapers],
+                        ).then(lambda: gr.update(value=None), outputs=[uploadFileBot])
+                    with gr.Accordion(label="新建知识库", open=False):
+                        newNamespaceTxt = gr.Textbox(
+                            label="知识库名称",
+                            # info="名称中不能包含下划线"
+                        )
+                        newEmbDdl = gr.Dropdown(
+                            choices=cast(
+                                list[str | int | float | tuple[str, str | int | float]]
+                                | None,
+                                SUPPORT_EMBS,
+                            ),
+                            multiselect=False,
+                            label="Embedding模型",
+                        )
+                        newCacheButton = gr.Button(value="新建本地知识库")
+                    with gr.Accordion(label="更改知识库", open=False):
+                        cacheNameDdl = gr.Dropdown(
+                            value=cache.namespace,
+                            choices=cache_lst,  # type:ignore
+                            label="选择知识库",
+                        )
+                        changeCacheBtn = gr.Button(value="更改为选中的本地知识库")
+                        deleteCacheBtn = gr.Button(value="删除选中的本地知识库")
+                    newCacheButton.click(
+                        create_cache,
+                        inputs=[newNamespaceTxt, newEmbDdl],
+                        outputs=[newNamespaceTxt, newEmbDdl, cacheNameDdl],
+                    )
+                    changeCacheBtn.click(
+                        change_cache,
+                        inputs=[cacheNameDdl],
+                        outputs=[
+                            currNamespaceTxt,
+                            currEmbTxt,
+                            cacheFilesDdl,
+                            dstCachedPapers,
+                        ],
+                    )
+                    deleteCacheBtn.click(
+                        delete_cache, inputs=[cacheNameDdl], outputs=[cacheNameDdl]
+                    )
+
         # with gr.Tab(label="工作台"):
         #     pass
         with gr.Tab(label="PDF文档问答"):
@@ -476,7 +584,12 @@ def create_ui():
                                 base_url=base_url,
                                 max_tokens=max_tokens,
                             ),
-                            inputs=[mllmDdl, mllmApikeyDdl, mllmBaseurlTxt, mllmMaxTokens]
+                            inputs=[
+                                mllmDdl,
+                                mllmApikeyDdl,
+                                mllmBaseurlTxt,
+                                mllmMaxTokens,
+                            ],
                         )
                         vqaSubmitBtn.click(
                             vqa_chat,
@@ -510,12 +623,6 @@ def create_ui():
             show_progress="hidden",
         )
         timeStampDisp.change(_state_change, inputs=None, outputs=[modal, modalMsg])
-
-        changeCacheBtn.click(
-            change_cache_config,
-            inputs=[embDdl, namespaceTxt],
-            outputs=[dstCachedPapers],
-        )
         submitBtn.click(
             fn=submit, inputs=[chatbot, txtbot, audio], outputs=[chatbot, txtbot, audio]
         )
@@ -529,6 +636,10 @@ def create_ui():
             check_and_clear_pdfqa_history,
             [pdfBox, docTxtbot, docChatbot],
             [docChatbot, docTxtbot],
+        )
+        demo.load(
+            fn=load_demo,
+            outputs=[dstCachedPapers, cacheFilesDdl, cacheNameDdl, currEmbTxt, currNamespaceTxt],
         )
     return demo
 

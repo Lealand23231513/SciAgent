@@ -16,6 +16,6 @@ def set_global_value(key: str, value: Any):
     _global_dict[key] = value
 
 
-def get_global_value(key: str):
+def get_global_value(key: str)-> Any:
     """get global var"""
     return _global_dict.get(key)
