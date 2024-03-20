@@ -116,6 +116,10 @@ def chat_with_document(filepath: str, question: str, chat_history: list):
         yield chat_history, None
     yield chat_history, gr.Textbox(interactive=True)
 
+def on_select(evt: gr.SelectData):
+    cache:Cache = global_var.get_global_value('cache')
+    gr.Info(f"已在PDF阅读器中打开“{evt.value[0]}”，切换到“PDF文档问答”栏以查看详情")
+    return str(cache.cached_files_dir/evt.value[0])
 
 def delete_all_files():
     cache = load_cache()
@@ -511,6 +515,7 @@ def create_ui():
                         delete_cache, inputs=[cacheNameDdl], outputs=[cacheNameDdl]
                     )
 
+
         # with gr.Tab(label="工作台"):
         #     pass
         with gr.Tab(label="PDF文档问答"):
@@ -640,6 +645,11 @@ def create_ui():
         demo.load(
             fn=load_demo,
             outputs=[dstCachedPapers, cacheFilesDdl, cacheNameDdl, currEmbTxt, currNamespaceTxt],
+        )
+        dstCachedPapers.select(
+            on_select,
+            outputs=pdfBox,
+            scroll_to_output=True
         )
     return demo
 
