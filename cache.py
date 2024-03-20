@@ -21,14 +21,33 @@ from librosa import cache
 from global_var import get_global_value, set_global_value
 from config import DEFAULT_CACHE_DIR, EMB_MODEL_MAP
 from typing import cast, List, Optional
-
+from state import BaseState
 from channel import load_channel
+from pydantic import Field
 
 class CacheConst():
     DEFAULT_CACHE_DIR=Path(DEFAULT_CACHE_DIR)
     LAST_RUNCACHE_CONFIG_PATH =DEFAULT_CACHE_DIR/"lastrun-settings.json"
     CACHE_LIST_PATH=DEFAULT_CACHE_DIR/"cache_list.json"
     EMB_MODEL_MAP=EMB_MODEL_MAP
+    MAX_CHUNK_SIZE = 4000
+    MIN_CHUNK_SIZE = 500
+    DEFAULT_CHUNK_SIZE = 1000
+    MAX_CHUNK_OVERLAP = 200
+    MIN_CHUNK_OVERLAP = 50
+    DEFAULT_CHUNK_OVERLAP = 200
+
+class CacheState(BaseState):
+    chunk_size: int = Field(
+        default=CacheConst.DEFAULT_CHUNK_SIZE,
+        ge=CacheConst.MIN_CHUNK_SIZE,
+        le=CacheConst.MAX_CHUNK_SIZE,
+    )
+    chunk_overlap: int = Field(
+        default=CacheConst.DEFAULT_CHUNK_OVERLAP,
+        ge=CacheConst.MIN_CHUNK_OVERLAP,
+        le=CacheConst.MAX_CHUNK_OVERLAP,
+    )
 
 def _clear_last_run_cache(**last_run_cache_config):
     cache=Cache(**last_run_cache_config)
@@ -81,7 +100,6 @@ class Cache(object):
             with open(self.emb_save_path,'rb') as f:
                 self.emb_config:EMBState = pickle.load(f)
         else:
-            print(emb_api_key, emb_base_url)
             self.emb_config = EMBState(model=emb_model_name, api_key=emb_api_key, base_url=emb_base_url)
             self.save_emb()
         self.embedding = OpenAIEmbeddings(
@@ -155,8 +173,6 @@ class Cache(object):
         self,
         path: str|Path,
         save_local=False,
-        chunk_size=1000,
-        chunk_overlap=200,
         add_start_index=True,
     ):
         """
@@ -187,10 +203,11 @@ class Cache(object):
         raw_docs = loader.load()
         for i in range(len(raw_docs)):
             raw_docs[i].metadata["source"] = Path(raw_docs[i].metadata["source"]).name
+        cache_state:CacheState = get_global_value('cache_state')
         text_splitter = CharacterTextSplitter(
             separator="\n",
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
+            chunk_size=cache_state.chunk_size,
+            chunk_overlap=cache_state.chunk_overlap,
             add_start_index=add_start_index,
         )
         docs = text_splitter.split_documents(raw_docs)
@@ -270,14 +287,7 @@ def init_cache(clear_old:bool=False, **kwargs):
     set_global_value('cache_lst', cache_lst)
     if CacheConst.LAST_RUNCACHE_CONFIG_PATH.exists():
         with open(CacheConst.LAST_RUNCACHE_CONFIG_PATH) as f:
-            # try:
             last_run_cache_config = cast(dict[str, Any], json.load(f))
-            # except Exception:
-            #     last_run_cache_config = {
-            #         "namespace": CacheConst.DEFAULT_CACHE_NAMESPACE,
-            #         "emb_model_name": CacheConst.DEFAULT_EMB_MODEL_NAME
-            #     }
-            #     logger.error("raised error when loading last run cache config, so set it as default")
         if last_run_cache_config!=kwargs:
             if clear_old:
                 logger.info(f'last run cache config {last_run_cache_config} is different from given kwargs, so clear last run cache and build a new cache')
@@ -293,6 +303,8 @@ def init_cache(clear_old:bool=False, **kwargs):
         cache = Cache(**new_cache_config)
         set_global_value('cache', cache)
         set_global_value('cache_config', new_cache_config)
+    cache_state = CacheState()
+    set_global_value('cache_state', cache_state)
 
 
 

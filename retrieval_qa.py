@@ -3,6 +3,7 @@ from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
 import logging
 from pathlib import Path
+from global_var import get_global_value
 from utils import fn_args_generator
 from typing import Callable, cast
 from cache import Cache, load_cache
@@ -13,6 +14,9 @@ from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.tools import BaseTool
 from sys import _getframe
 from functools import partial
+from channel import load_channel
+from tools import BaseToolState
+from model_state import LLMState
 
 
 logger = logging.getLogger(Path(__file__).stem)
@@ -25,41 +29,94 @@ Context:
 question: {question}
 """
 
-def retrieval(temperatureValue:float, query:str, path:str|None=None) -> str:
-    '''
+
+class RetrievalStateConst:
+    MAX_TEMPERATURE = 1
+    MIN_TEMPERATURE = 0
+    DEFAULT_TEMPERATURE = 0.5
+    MAX_TOP_P = 1
+    MIN_TOP_P = 0
+    DEFAULT_TOP_P = 0.7
+    MAX_SCORE_THRESHOLD = 1
+    MIN_SCORE_THRESHOLD = 0
+    DEFAULT_SCORE_THRESHOLD = 0.1
+
+
+
+class RetrievalState(BaseToolState):
+    temperature: float = Field(
+        default=RetrievalStateConst.DEFAULT_TEMPERATURE,
+        ge=RetrievalStateConst.MIN_TEMPERATURE,
+        le=RetrievalStateConst.MAX_TEMPERATURE,
+    )
+    top_p: float = Field(
+        default=RetrievalStateConst.DEFAULT_TOP_P,
+        ge=RetrievalStateConst.MIN_TOP_P,
+        le=RetrievalStateConst.MAX_TOP_P,
+    )    
+    score_threshold: float = Field(
+        default=RetrievalStateConst.DEFAULT_SCORE_THRESHOLD,
+        ge=RetrievalStateConst.MIN_SCORE_THRESHOLD,
+        le=RetrievalStateConst.MAX_SCORE_THRESHOLD,
+    )
+
+    @property
+    def instance(self) -> BaseTool:
+        return get_retrieval_tool()
+
+
+def retrieval(
+    query: str, 
+    temperature: float = RetrievalStateConst.DEFAULT_TEMPERATURE,
+    top_p:float = RetrievalStateConst.DEFAULT_TOP_P,
+    score_threshold:float = RetrievalStateConst.DEFAULT_SCORE_THRESHOLD
+) -> str:
+    """
     Retrieve the content of the cached papers and response to the user's query.
     :param query: User's question about the paper
-    :param path: path or url of the paper
-    '''
-    logger = logging.getLogger('.'.join([Path(__file__).stem, _getframe().f_code.co_name]))
-    logger.info('retrieval start')
+    """
+    logger = logging.getLogger(
+        ".".join([Path(__file__).stem, _getframe().f_code.co_name])
+    )
+    logger.info("retrieval start")
     cache = load_cache()
-    if path:
-        cache.cache_file(path)# TODO: check uncached files
+    if cache is None:
+        channel = load_channel()
+        msg = "请先建立知识库！"
+        channel.show_modal("error", msg)
+        return msg
     prompt = PromptTemplate(
-        template=prompt_template,
-        input_variables=["context", "question"]
+        template=prompt_template, input_variables=["context", "question"]
     )
     chain_type_kwargs = {"prompt": prompt}
-    qa_chain = RetrievalQA.from_chain_type(llm=ChatOpenAI(model='gpt-3.5-turbo-0125', temperature=temperatureValue), chain_type="stuff",# TODO: temperature, llm(changable)
-                                     retriever=cache.vectorstore.as_retriever(),
-                                     chain_type_kwargs=chain_type_kwargs,
-                                     return_source_documents=True)
+    llm_state:LLMState = get_global_value('llm_state')
+    qa_chain = RetrievalQA.from_chain_type(
+        llm=ChatOpenAI(model=llm_state.model, temperature=temperature, model_kwargs={"top_p": top_p}),
+        chain_type="stuff",  # TODO: temperature, llm(changable)
+        retriever=cache.vectorstore.as_retriever(
+            search_type="similarity_score_threshold",
+            search_kwargs={'score_threshold': score_threshold}
+        ),
+        chain_type_kwargs=chain_type_kwargs,
+        return_source_documents=True,
+    )
     ans = qa_chain.invoke({"query": query})
     logger.info(ans)
-    return ans['result']
+    return ans["result"]
+
 
 class RetrievalInput(BaseModel):
     """Input for the Retrieval tool."""
+
     query: str = Field(description="query about the cached papers")
 
+
 class RetrievalQueryRun(BaseTool):
-    name:str="retrieval"
-    description: str=(
-        "Retrieve the content of the cached papers and answer questions."
-    )
-    retrieve_function: Callable=Field(default=retrieval)
+    name: str = "retrieval"
+    description: str = "Retrieve the content of the cached papers and answer questions."
+    retrieve_function: Callable = Field(default=retrieval)
     args_schema: Type[BaseModel] = RetrievalInput
+
     def _run(
         self,
         query: str,
@@ -67,9 +124,13 @@ class RetrievalQueryRun(BaseTool):
     ) -> str:
         """Use the Retrieval tool."""
         return self.retrieve_function(query)
-def get_retrieval_tool():
-    return RetrievalQueryRun(partial(retrieval, temperatureValue = 0.7))
+
+
+def get_retrieval_tool(**kwargs):
+    return RetrievalQueryRun(retrieve_function=partial(retrieval,**kwargs))
+
 
 if __name__ == "main":
     tool = get_retrieval_tool()
-    tool._run()
+    print(tool.schema())
+    # tool._run()

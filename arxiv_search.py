@@ -15,7 +15,7 @@ from langchain import hub
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import BaseTool
 from functools import partial
-from channel import Channel
+from channel import Channel, load_channel
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,11 @@ class CustomArxivAPIWrapper(BaseModel):
 
         def download_callback(written_path: str):
             cache = load_cache()
-            cache.cache_file(written_path)
+            if cache is None:
+                channel=load_channel()
+                msg = "请先建立知识库！"
+                channel.show_modal("error", msg)
+            cache.cache_file(written_path)#type:ignore
             logger.info(f"successfully download {Path(written_path).name}")
 
         logger.info("Arxiv search start")
@@ -95,6 +99,11 @@ class CustomArxivAPIWrapper(BaseModel):
                 res = json.loads(res)
                 if res["response"] == True:
                     cache = load_cache()
+                    if cache is None:
+                        channel=load_channel()
+                        msg = "请先建立知识库！"
+                        channel.show_modal("error", msg)
+                        return msg
                     pool.apply_async(
                         partial(
                             result.download_pdf, dirpath=str(cache.cached_files_dir)

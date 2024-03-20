@@ -1,7 +1,6 @@
 import abc
 from arxiv_search import get_customed_arxiv_search_tool
 from global_var import get_global_value
-from retrieval_qa import get_retrieval_tool
 from google_scholar_search import get_google_scholar_search_tool
 from functools import partial
 from pydantic import BaseModel, model_validator, Field
@@ -20,6 +19,9 @@ class BaseToolState(BaseState, abc.ABC):
 
 class WebSearchStateConst():
     DEFAULT_DOWNLOAD = False
+    DEFAULT_TOP_K_RESULTS = 3
+    DEFAULT_LOAD_ALL_AVAILABLE_META = False
+    DEFAULT_LOAD_MAX_DOCS = 100
 
 class WebSearchState(BaseToolState):
     download: bool = WebSearchStateConst.DEFAULT_DOWNLOAD
@@ -28,56 +30,6 @@ class WebSearchState(BaseToolState):
     def instance(self) -> BaseTool:
         kwargs = self.model_dump()
         return get_google_scholar_search_tool(**kwargs)
-
-
-class RetrievalStateConst:
-    MAX_TEMPERATURE = 1
-    MIN_TEMPERATURE = 0
-    DEFAULT_TEMPERATURE = 0.5
-    MAX_TOP_P = 1
-    MIN_TOP_P = 0
-    DEFAULT_TOP_P = 0.7
-    MAX_CHUNK_SIZE = 4000
-    MIN_CHUNK_SIZE = 500
-    DEFAULT_CHUNK_SIZE = 1000
-    MAX_SCORE_THRESHOLD = 1
-    MIN_SCORE_THRESHOLD = 0
-    DEFAULT_SCORE_THRESHOLD = 0.1
-    MAX_CHUNK_OVERLAP = 200
-    MIN_CHUNK_OVERLAP = 200
-    DEFAULT_CHUNK_OVERLAP = 200
-
-
-class RetrievalState(BaseToolState):
-    temperature: float = Field(
-        default=RetrievalStateConst.DEFAULT_TEMPERATURE,
-        ge=RetrievalStateConst.MIN_TEMPERATURE,
-        le=RetrievalStateConst.MAX_TEMPERATURE,
-    )
-    top_p: float = Field(
-        default=RetrievalStateConst.DEFAULT_TOP_P,
-        ge=RetrievalStateConst.MIN_TOP_P,
-        le=RetrievalStateConst.MAX_TOP_P,
-    )
-    chunk_size: int = Field(
-        default=RetrievalStateConst.DEFAULT_CHUNK_SIZE,
-        ge=RetrievalStateConst.MIN_CHUNK_SIZE,
-        le=RetrievalStateConst.MAX_CHUNK_SIZE,
-    )
-    score_threshold: float = Field(
-        default=RetrievalStateConst.DEFAULT_SCORE_THRESHOLD,
-        ge=RetrievalStateConst.MIN_SCORE_THRESHOLD,
-        le=RetrievalStateConst.MAX_SCORE_THRESHOLD,
-    )
-    chunk_overlap: int = Field(
-        default=RetrievalStateConst.DEFAULT_CHUNK_OVERLAP,
-        ge=RetrievalStateConst.MIN_CHUNK_OVERLAP,
-        le=RetrievalStateConst.MAX_CHUNK_OVERLAP,
-    )
-
-    @property
-    def instance(self) -> BaseTool:
-        return get_retrieval_tool()
 
 class ToolsState(BaseState):
     tools_select: list[str] = []

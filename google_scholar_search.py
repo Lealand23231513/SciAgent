@@ -14,7 +14,7 @@ from scholarly import scholarly
 from typing import Optional, cast
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.callbacks import CallbackManagerForToolRun
-from channel import Channel
+from channel import load_channel
 
 logger = logging.getLogger(Path(__file__).stem)
 
@@ -72,10 +72,15 @@ class GoogleScholarWrapper(BaseModel):
                                 "message": f'Do you want to download file "{title}" ?',
                             }
                         )
-                        channel = cast(Channel, global_var.get_global_value("channel"))
+                        channel = load_channel
                         res = cast(str, channel.push(msg, require_response=True))
                         res = json.loads(res)
                         cache = load_cache()
+                        if cache is None:
+                            channel=load_channel()
+                            msg = "请先建立知识库！"
+                            channel.show_modal("error", msg)
+                            return msg
                         folder_name = cache.cached_files_dir
                         file_name = parse.quote(title, safe = "") + '.pdf'
                         if res['response'] == True:

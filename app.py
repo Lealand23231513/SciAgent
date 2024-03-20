@@ -27,8 +27,6 @@ import state
 from gradio_mypdf import PDF
 from gradio_modal import Modal
 from document_qa import document_qa_fn
-import numpy as np
-from PIL import Image
 from multimodal import multimodal_chat
 from model_state import (
     LLMState,
@@ -39,12 +37,11 @@ from model_state import (
     EMBState,
 )
 from tools import (
-    RetrievalState,
     ToolsState,
     WebSearchState,
-    RetrievalStateConst,
     WebSearchStateConst,
 )
+from retrieval_qa import RetrievalState, RetrievalStateConst
 
 
 def _init_state_vars():
@@ -190,16 +187,15 @@ def create_cache(namespace: str):
         valid = False
     if valid == False:
         return gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-    if isinstance(emb_state.api_key,str)==False or emb_state.api_key=='':
+    if isinstance(emb_state.api_key, str) == False or emb_state.api_key == "":
         emb_state.api_key = None
-    if isinstance(emb_state.base_url,str)==False or emb_state.base_url=='':
+    if isinstance(emb_state.base_url, str) == False or emb_state.base_url == "":
         emb_state.base_url = None
     cache_lst: list[str] = global_var.get_global_value("cache_lst")
     if namespace in cache_lst:
         gr.Warning(f"知识库“{namespace}”已经存在，故无法创建")
         cache = load_cache(namespace)
     else:
-        print(emb_state.model_dump())
         cache = Cache(
             namespace=namespace,
             emb_model_name=emb_state.model,
@@ -293,15 +289,19 @@ def create_ui():
         return {modal: Modal(visible=False), modalMsg: ""}
 
     def load_demo():
-        cache: Cache|None = global_var.get_global_value("cache")
+        cache: Cache | None = global_var.get_global_value("cache")
         cache_lst: list[str] = global_var.get_global_value("cache_lst")
         mllm_state: MLLMState = global_var.get_global_value("mllm_state")
         llm_state: LLMState = global_var.get_global_value("llm_state")
         pdf_llm_state: LLMState = global_var.get_global_value("pdf_llm_state")
         return {
             dstCachedPapers: [[i] for i in cache.all_files] if cache else [],
-            cacheFilesDdl: gr.update(value=None, choices=cache.all_files) if cache else [],
-            cacheNameDdl: gr.update(value=cache.namespace, choices=cache_lst) if cache else None,
+            cacheFilesDdl: (
+                gr.update(value=None, choices=cache.all_files) if cache else []
+            ),
+            cacheNameDdl: (
+                gr.update(value=cache.namespace, choices=cache_lst) if cache else None
+            ),
             currEmbTxt: cache.emb_model_name if cache else None,
             currNamespaceTxt: cache.namespace if cache else None,
             mllmDdl: mllm_state.model,
@@ -358,12 +358,9 @@ def create_ui():
                         inputs=[toolsDdl],
                     )
                     with gr.Accordion(label="模型设置"):
-                        llm_state = cast(
-                            LLMState, global_var.get_global_value("llm_state")
-                        )
                         llmDdl = gr.Dropdown(
                             choices=SUPPORT_LLMS,  # type: ignore
-                            value=llm_state.model,
+                            # value=llm_state.model,
                             label="模型ID",
                         )
                         llmApikeyDdl = gr.Textbox(
@@ -418,15 +415,6 @@ def create_ui():
                             info=f"请在0至1之间选择",
                             interactive=True,
                         )
-                        chunkSizeSlider = gr.Slider(
-                            label="切片长度",
-                            minimum=RetrievalStateConst.MIN_CHUNK_SIZE,
-                            maximum=RetrievalStateConst.MAX_CHUNK_SIZE,
-                            step=1,
-                            value=RetrievalStateConst.DEFAULT_CHUNK_SIZE,
-                            info="选择每段被切割文案的长度",
-                            interactive=True,
-                        )
                         scoreThresholdSlider = gr.Slider(
                             label="分数阈值",
                             minimum=RetrievalStateConst.MIN_SCORE_THRESHOLD,
@@ -434,52 +422,41 @@ def create_ui():
                             value=RetrievalStateConst.DEFAULT_SCORE_THRESHOLD,
                             interactive=True,
                         )
-                        chunkOverlapSlider = gr.Slider(
-                            label="切片重叠部分长度",
-                            minimum=RetrievalStateConst.MIN_CHUNK_OVERLAP,
-                            maximum=RetrievalStateConst.MAX_CHUNK_OVERLAP,
-                            step=50,
-                            value=RetrievalStateConst.DEFAULT_CHUNK_OVERLAP,
-                            interactive=True,
-                        )
+
                         gr.on(
                             [
                                 temperatureSlider.change,
                                 toppSlider.change,
-                                chunkSizeSlider.change,
                                 scoreThresholdSlider.change,
-                                chunkOverlapSlider.change,
                             ],
-                            lambda temperature, top_p, chunk_size, score_threshold, chunk_overlap: state.change_state(
+                            lambda temperature, top_p, score_threshold: state.change_state(
                                 "retrieval_state",
                                 temperature=temperature,
                                 top_p=top_p,
-                                chunk_size=chunk_size,
                                 score_threshold=score_threshold,
-                                chunk_overlap=chunk_overlap,
                             ),
                             inputs=[
                                 temperatureSlider,
                                 toppSlider,
-                                chunkSizeSlider,
                                 scoreThresholdSlider,
-                                chunkOverlapSlider,
                             ],
                         )
 
         with gr.Tab(label="本地知识库"):
             with gr.Row():
                 with gr.Column(scale=3):
+                    gr.Markdown("可以点击文章名查看文章内容")
                     dstCachedPapers = gr.Dataset(
                         components=[gr.Textbox(visible=False)],
-                        label=f"已存储的文章",
+                        label="已存储的文章",
                         # samples=[[i] for i in cache.all_files],
+                        samples=[]
                     )
                 with gr.Column(scale=1):
                     currNamespaceTxt = gr.Textbox(
-                        label="当前知识库", 
-                        # value=cache.namespace, 
-                        interactive=False
+                        label="当前知识库",
+                        # value=cache.namespace,
+                        interactive=False,
                     )
                     currEmbTxt = gr.Textbox(
                         label="当前知识库使用的Embedding模型",
@@ -487,6 +464,23 @@ def create_ui():
                         interactive=False,
                     )
                     with gr.Accordion(label="文件管理"):
+                        chunkSizeSlider = gr.Slider(
+                            label="切片长度",
+                            minimum=CacheConst.MIN_CHUNK_SIZE,
+                            maximum=CacheConst.MAX_CHUNK_SIZE,
+                            step=1,
+                            value=CacheConst.DEFAULT_CHUNK_SIZE,
+                            info="选择每段被切割文案的长度",
+                            interactive=True,
+                        )
+                        chunkOverlapSlider = gr.Slider(
+                            label="切片重叠部分长度",
+                            minimum=CacheConst.MIN_CHUNK_OVERLAP,
+                            maximum=CacheConst.MAX_CHUNK_OVERLAP,
+                            step=50,
+                            value=CacheConst.DEFAULT_CHUNK_OVERLAP,
+                            interactive=True,
+                        )
                         cacheFilesDdl = gr.Dropdown(
                             label="选择要从本地知识库中删除的文章",
                             multiselect=True,
@@ -498,6 +492,15 @@ def create_ui():
                         )
                         delete_button = gr.Button("删除")
                         cleanCacheBtn = gr.Button("删除全部")
+                        gr.on(
+                            [chunkSizeSlider.change, chunkOverlapSlider.change],
+                            fn=lambda chunk_size, chunk_overlap: state.change_state(
+                                "cache_state",
+                                chunk_size=chunk_size,
+                                chunk_overlap=chunk_overlap,
+                            ),
+                            inputs=[chunkSizeSlider, chunkOverlapSlider],
+                        )
                         delete_button.click(
                             fn=delete_files,
                             inputs=[cacheFilesDdl],
@@ -514,7 +517,7 @@ def create_ui():
                     with gr.Accordion(label="新建知识库", open=False):
                         newNamespaceTxt = gr.Textbox(
                             label="知识库名称",
-                            info="名称应为3-63个字母或者数字组成的字符串"
+                            info="名称应为3-63个字母或者数字组成的字符串",
                         )
                         newEmbDdl = gr.Dropdown(
                             choices=EMBStateConst.EMB_CHOICES,  # type:ignore
@@ -558,7 +561,13 @@ def create_ui():
                     newCacheButton.click(
                         create_cache,
                         inputs=[newNamespaceTxt],
-                        outputs=[newNamespaceTxt, newEmbDdl, cacheNameDdl, newEmbApiKeyDdl, newEmbBaseurlTxt],
+                        outputs=[
+                            newNamespaceTxt,
+                            newEmbDdl,
+                            cacheNameDdl,
+                            newEmbApiKeyDdl,
+                            newEmbBaseurlTxt,
+                        ],
                     )
                     changeCacheBtn.click(
                         change_cache,
@@ -751,7 +760,7 @@ def create_ui():
                 pdfLlmBaseurlTxt,
                 mllmDdl,
                 mllmApikeyDdl,
-                mllmBaseurlTxt
+                mllmBaseurlTxt,
             ],
         )
         dstCachedPapers.select(on_select, outputs=pdfBox, scroll_to_output=True)
