@@ -69,14 +69,18 @@ def multimodal_chat(
             messages=messages,
             max_tokens=mllm_state.max_tokens
         )
-    except HTTPError as httpe:
-        logger.exception(httpe)
-    if stream:
-        response = cast(Stream[ChatCompletionChunk], response)
-        for chunk in response:
-            part = chunk.choices[0].delta.content
-            if part:
-                yield part
-    else:
-        response = cast(ChatCompletion, response)
-        return response.choices[0].message.content
+        if stream:
+            response = cast(Stream[ChatCompletionChunk], response)
+            for chunk in response:
+                part = chunk.choices[0].delta.content
+                if part:
+                    yield part
+        else:
+            response = cast(ChatCompletion, response)
+            return response.choices[0].message.content
+    except Exception as e:
+        logger.error(e)
+        if stream:
+            yield from repr(e)
+        else:
+            return repr(e)

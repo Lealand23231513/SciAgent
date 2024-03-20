@@ -1,4 +1,8 @@
 import gradio as gr
+import os
+import logging
+import openai
+import global_var
 from gradio_pdf import PDF
 from pathlib import Path
 from langchain.text_splitter import CharacterTextSplitter
@@ -6,11 +10,11 @@ from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
 from langchain.chains.question_answering import load_qa_chain
-import logging
+
 from pathlib import Path
-import os
-import openai
 from dotenv import load_dotenv
+from channel import load_channel
+from model_state import LLMState
 
 logger = logging.getLogger(Path(__file__).stem)
 
@@ -44,7 +48,6 @@ def _load_docs(path: str):
     documents = loader.load()
     text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
     docs = text_splitter.split_documents(documents)
-    logger.info(f"The paper ({path}) has been retrieved successfully.")
     return docs
 
 
@@ -59,23 +62,38 @@ def document_qa_fn(path: str, query: str) -> str:
         template=prompt_template_stuff,
         input_variables=["context", "question"],
     )
-    llm = ChatOpenAI(temperature=0.1, model="gpt-3.5-turbo-0125")
+    pdf_llm_state: LLMState = global_var.get_global_value("pdf_llm_state")
+    llm = ChatOpenAI(
+        temperature=0.1, 
+        model=pdf_llm_state.model, 
+        api_key=pdf_llm_state.api_key, # type: ignore
+        base_url=pdf_llm_state.base_url
+    )  
     chain = load_qa_chain(
         llm=llm,
         chain_type="stuff",
         prompt=prompt,
     )
-    ans = chain.invoke(
-        {"input_documents": docs, "question": query}, return_only_outputs=True
-    )
-    logger.info(ans)
-    return ans["output_text"]
+    try:
+        ans = chain.invoke(
+            {"input_documents": docs, "question": query}, return_only_outputs=True
+        )
+        logger.info(ans)
+        return ans["output_text"]
+    except Exception as e:
+        channel = load_channel()
+        channel.show_modal("error", repr(e))
+        logger.error(repr(e))
+        return repr(e)
+
 
 if __name__ == "__main__":
     dir = Path("document_qa_examples")
+
     def fn(question: str, filepath: str) -> str:
         output = document_qa_fn(filepath, question)
         return output
+
     demo = gr.Interface(
         fn,
         [

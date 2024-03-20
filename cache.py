@@ -1,3 +1,9 @@
+import logging
+import shutil
+import json
+import atexit
+import pickle
+from model_state import EMBState, EMBStateConst
 from venv import logger
 from grpc import Channel
 from langchain.text_splitter import CharacterTextSplitter
@@ -5,35 +11,24 @@ from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
 import logging
+import copy
 from pathlib import Path
-import shutil
-import json
-import atexit
+
 from langchain.indexes import SQLRecordManager, index
 from typing import Any, Literal, cast
 
 from librosa import cache
 from global_var import get_global_value, set_global_value
-from config import DEFAULT_CACHE_DIR, EMB_MODEL_MAP, DEFAULT_CACHE_NAMESPACE, DEFAULT_EMB_MODEL_NAME
+from config import DEFAULT_CACHE_DIR, EMB_MODEL_MAP
 from typing import cast, List, Optional
-import logging
+
 from channel import load_channel
 
 class CacheConst():
     DEFAULT_CACHE_DIR=Path(DEFAULT_CACHE_DIR)
     LAST_RUNCACHE_CONFIG_PATH =DEFAULT_CACHE_DIR/"lastrun-settings.json"
     CACHE_LIST_PATH=DEFAULT_CACHE_DIR/"cache_list.json"
-    DEFAULT_CACHE_NAMESPACE=DEFAULT_CACHE_NAMESPACE
-    DEFAULT_EMB_MODEL_NAME=DEFAULT_EMB_MODEL_NAME
     EMB_MODEL_MAP=EMB_MODEL_MAP
-
-def _first_init_cache(**kwargs):
-    cache = Cache(**kwargs)
-    last_run_cache_config = {
-        "namespace": cache.namespace,
-        "emb_model_name": cache.emb_model_name,
-    }
-    return last_run_cache_config
 
 def _clear_last_run_cache(**last_run_cache_config):
     cache=Cache(**last_run_cache_config)
@@ -51,11 +46,10 @@ def _write_cache_lst():
 class Cache(object):
     def __init__(
         self,
-        namespace: str = CacheConst.DEFAULT_CACHE_NAMESPACE,
-        emb_model_name: str = CacheConst.DEFAULT_EMB_MODEL_NAME,
-        # all_files: Optional[List[str]] = None,
-        # vectorstore=None,
-        # record_manager=None,
+        namespace: str,
+        emb_model_name: str,
+        emb_api_key:Optional[str]=None,
+        emb_base_url:Optional[str]=None
     ) -> None:
         self.emb_model_name = emb_model_name
         self.namespace = namespace
@@ -68,10 +62,10 @@ class Cache(object):
         if self.root_dir.exists() == False:
             self.root_dir.mkdir(parents=True)
         self.cache_config_path = self.root_dir / "config.json"
-        self.filenames_save_path = self.root_dir / "cached-files.json"
-        if self.filenames_save_path.exists() == False:
-            self.filenames_save_path.touch()
-            with open(self.filenames_save_path,'w') as f:
+        self.allfiles_lst_path = self.root_dir / "cached-files.json"
+        if self.allfiles_lst_path.exists() == False:
+            self.allfiles_lst_path.touch()
+            with open(self.allfiles_lst_path,'w') as f:
                 json.dump([],f)
         self.cached_files_dir = self.root_dir / "cached-files"
         self.config = {
@@ -81,33 +75,39 @@ class Cache(object):
         self.save_config()
         if self.cached_files_dir.exists() == False:
             self.cached_files_dir.mkdir(parents=True)
+        self.emb_save_path = self.root_dir/'emb.pkl'
+        
+        if self.emb_save_path.exists() and emb_api_key is None and emb_base_url is None:
+            with open(self.emb_save_path,'rb') as f:
+                self.emb_config:EMBState = pickle.load(f)
+        else:
+            print(emb_api_key, emb_base_url)
+            self.emb_config = EMBState(model=emb_model_name, api_key=emb_api_key, base_url=emb_base_url)
+            self.save_emb()
         self.embedding = OpenAIEmbeddings(
-            model=emb_model_name,
-            api_key=CacheConst.EMB_MODEL_MAP[emb_model_name]["api_key"],
-            base_url=CacheConst.EMB_MODEL_MAP[emb_model_name]["base_url"],
+            model=self.emb_config.model,
+            api_key=self.emb_config.api_key,#type:ignore #CacheConst.EMB_MODEL_MAP[emb_model_name]["api_key"],
+            base_url=self.emb_config.base_url#CacheConst.EMB_MODEL_MAP[emb_model_name]["base_url"],
         )
-        # TODO: customed embedding
-        # if all_files is None:
         self.load_filenames()
-        # else:
-            # self.all_files = all_files
-        # if vectorstore is None:
         self.load_vectorstore()
-        # else:
-            # self.vectorstore = vectorstore
-        # if record_manager is None:
         self.load_record_manager()
-        # else:
-            # self.record_manager = record_manager
     
     def save_config(self):
         with open(self.cache_config_path,'w') as f:
             json.dump(self.config,f)
+    def save_allfiles_lst(self):
+        # save cached files' name
+        with open(self.allfiles_lst_path, "w") as f:
+            json.dump(self.all_files, f)
+    def save_emb(self):
+        with open(self.emb_save_path, 'wb') as f:
+            pickle.dump(self.emb_config,f)
 
     def load_filenames(self):
         # load cached files' name
         try:
-            with open(self.filenames_save_path) as f:
+            with open(self.allfiles_lst_path) as f:
                 self.all_files = cast(list[str], json.load(f))
         except Exception as e:
             logger = logging.getLogger(Path(__file__).stem+'.load_filenames')
@@ -129,20 +129,15 @@ class Cache(object):
         # load Chroma vecotrstore with OpenAI embeddings
         persist_directory = str(self.root_dir / "chroma")
         self.vectorstore = Chroma(
-            collection_name=self.emb_model_name,
+            collection_name=self.namespace,
             embedding_function=self.embedding,
             persist_directory=persist_directory,
         )
         return self.vectorstore
 
-    def save_all_files(self):
-        # save cached files' name
-        with open(self.filenames_save_path, "w") as f:
-            json.dump(self.all_files, f)
-
     def clear_all(self):
         self.all_files = []
-        self.save_all_files()
+        self.save_allfiles_lst()
         for file in self.cached_files_dir.iterdir():
             file.unlink()
         logger = logging.getLogger(Path(__file__).stem)
@@ -210,7 +205,7 @@ class Cache(object):
             cleanup="incremental",
             source_id_key="source",
         )
-        self.save_all_files()
+        self.save_allfiles_lst()
         logger = logging.getLogger(Path(__file__).stem)
         logger.debug(f"all files:{self.all_files}")
         logger.info(index_res)
@@ -233,21 +228,23 @@ class Cache(object):
             "num_deleted": num_deleted,
         }
         self.all_files=[f for f in self.all_files if f!=filename]
-        self.save_all_files()
+        self.save_allfiles_lst()
         logger.info(delete_res)
     def delete_cache(self):
         '''
         delete cache in default cache dir
         '''
         self.clear_all()
+        self.emb_save_path.unlink()
+        self.cache_config_path.unlink()
+        self.allfiles_lst_path.unlink()
         cache_lst = get_global_value('cache_lst')
         cache_lst = [item for item in cache_lst if item!=self.namespace]
         set_global_value('cache_lst',cache_lst)
         _write_cache_lst()
         logger.info(f'delete cache {self.namespace}')
     def _prepare_del(self):
-        self.save_all_files()
-        self.save_config()
+        self.save_allfiles_lst()
     def __del__(self):
         pass
 
@@ -273,14 +270,14 @@ def init_cache(clear_old:bool=False, **kwargs):
     set_global_value('cache_lst', cache_lst)
     if CacheConst.LAST_RUNCACHE_CONFIG_PATH.exists():
         with open(CacheConst.LAST_RUNCACHE_CONFIG_PATH) as f:
-            try:
-                last_run_cache_config = cast(dict[str, Any], json.load(f))
-            except Exception:
-                last_run_cache_config = {
-                    "namespace": CacheConst.DEFAULT_CACHE_NAMESPACE,
-                    "emb_model_name": CacheConst.DEFAULT_EMB_MODEL_NAME
-                }
-                logger.error("raised error when loading last run cache config, so set it as default")
+            # try:
+            last_run_cache_config = cast(dict[str, Any], json.load(f))
+            # except Exception:
+            #     last_run_cache_config = {
+            #         "namespace": CacheConst.DEFAULT_CACHE_NAMESPACE,
+            #         "emb_model_name": CacheConst.DEFAULT_EMB_MODEL_NAME
+            #     }
+            #     logger.error("raised error when loading last run cache config, so set it as default")
         if last_run_cache_config!=kwargs:
             if clear_old:
                 logger.info(f'last run cache config {last_run_cache_config} is different from given kwargs, so clear last run cache and build a new cache')
@@ -290,17 +287,16 @@ def init_cache(clear_old:bool=False, **kwargs):
     else:
         logger.info("Can't find last run config, will create a config file")
         CacheConst.LAST_RUNCACHE_CONFIG_PATH.touch()
-        new_cache_config = _first_init_cache(**kwargs)
+        new_cache_config = {}
     _write_last_run_cache_config(new_cache_config)
-    cache = Cache(**new_cache_config)
-    set_global_value('cache', cache)
-    set_global_value('cache_config', new_cache_config)
-    
-    return cache
+    if new_cache_config:
+        cache = Cache(**new_cache_config)
+        set_global_value('cache', cache)
+        set_global_value('cache_config', new_cache_config)
 
 
 
-def load_cache(namespace:Optional[str]=None) -> Cache:
+def load_cache(namespace:Optional[str]=None) -> Cache|None:
     if namespace:
         cache_path = CacheConst.DEFAULT_CACHE_DIR /namespace
         if cache_path.exists():
@@ -315,19 +311,9 @@ def load_cache(namespace:Optional[str]=None) -> Cache:
         cache:Cache = get_global_value('cache')
         return cache
 
-def create_new_cache(namespace:str, emb_model_name:str) -> Cache:
-    # cache_path = CacheConst.DEFAULT_CACHE_DIR / namespace
-    cache_lst:list[str] = get_global_value('cache_lst')
-    if namespace in cache_lst:
-        channel = load_channel()
-        channel.show_modal('warning', f'知识库“{namespace}”已经存在，故无法创建。\n将为您加载知识库“{namespace}”。')
-        return load_cache(namespace)
-    else:
-        return Cache(namespace=namespace, emb_model_name=emb_model_name)
-
 
 def change_running_cache(namespace:str):
-    cache=load_cache(namespace)
+    cache:Cache=load_cache(namespace)#type:ignore
     set_global_value('cache', cache)
     set_global_value('cache_cofig', cache.config)
     _write_last_run_cache_config(cache.config)

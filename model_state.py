@@ -46,14 +46,14 @@ class MLLMState(BaseState):
         le=MLLMStateConst.MINIMUN_MAX_TOKENS,
         ge=MLLMStateConst.MAXIMUM_MAX_TOKENS,
     )
-    # @model_validator(mode="after")
-    # @classmethod
-    # def validate_environ(cls, values):
-    #     if values.model not in MLLMStateConst.MLLM_CHOICES:
-    #         raise ValueError(f"llm {values.model} is not support.")
-    #     if values.api_key == "":
-    #         values.api_key = None
-    #     if values.base_url == "":
-    #         values.base_url = None
-    #     return values
 
+class EMBStateConst:
+    DEFAULT_EMB = SUPPORT_EMBS[0]
+    EMB_CHOICES = SUPPORT_EMBS
+    DEFAULT_API_KEY = None
+    DEFAULT_BASE_URL = None
+
+class EMBState(BaseState):
+    model: str = EMBStateConst.DEFAULT_EMB
+    api_key: Optional[str] = EMBStateConst.DEFAULT_API_KEY
+    base_url: Optional[str] = EMBStateConst.DEFAULT_BASE_URL
