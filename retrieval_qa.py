@@ -100,7 +100,13 @@ def retrieval(
         chain_type_kwargs=chain_type_kwargs,
         return_source_documents=True,
     )
-    ans = qa_chain.invoke({"query": query})
+    try:
+        ans = qa_chain.invoke({"query": query})
+    except Exception as e:
+        channel = load_channel()
+        msg = repr(e)
+        channel.show_modal("error", msg)
+        return msg
     logger.info(ans)
     return ans["result"]
 

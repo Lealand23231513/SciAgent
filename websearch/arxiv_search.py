@@ -16,11 +16,13 @@ from langchain_openai import ChatOpenAI
 from langchain_core.tools import BaseTool
 from functools import partial
 from channel import Channel, load_channel
+from websearch_state import WebSearchStateConst
 
 logger = logging.getLogger(__name__)
 
+
 class ArxivConst:
-    NAME='arxiv'
+    NAME = "arxiv"
 
 
 class CustomArxivAPIWrapper(BaseModel):
@@ -34,12 +36,12 @@ class CustomArxivAPIWrapper(BaseModel):
         arxiv.UnexpectedEmptyPageError,
         arxiv.HTTPError,
     )
-    top_k_results: int = 3
+    top_k_results: int = WebSearchStateConst.DEFAULT_TOP_K_RESULTS
     ARXIV_MAX_QUERY_LENGTH: int = 300
-    load_max_docs: int = 100
-    load_all_available_meta: bool = False
+    load_max_docs: int = WebSearchStateConst.DEFAULT_LOAD_MAX_DOCS
+    load_all_available_meta: bool = WebSearchStateConst.DEFAULT_LOAD_ALL_AVAILABLE_META
     doc_content_chars_max: Optional[int] = 4000
-    download: bool = False
+    download: bool = WebSearchStateConst.DEFAULT_DOWNLOAD
 
     def is_arxiv_identifier(self, query: str) -> bool:
         """Check if a query is an arxiv identifier."""
@@ -66,10 +68,10 @@ class CustomArxivAPIWrapper(BaseModel):
         def download_callback(written_path: str):
             cache = load_cache()
             if cache is None:
-                channel=load_channel()
+                channel = load_channel()
                 msg = "请先建立知识库！"
                 channel.show_modal("error", msg)
-            cache.cache_file(written_path)#type:ignore
+            cache.cache_file(written_path)  # type:ignore
             logger.info(f"successfully download {Path(written_path).name}")
 
         logger.info("Arxiv search start")
@@ -103,7 +105,7 @@ class CustomArxivAPIWrapper(BaseModel):
                 if res["response"] == True:
                     cache = load_cache()
                     if cache is None:
-                        channel=load_channel()
+                        channel = load_channel()
                         msg = "请先建立知识库！"
                         channel.show_modal("error", msg)
                         return msg

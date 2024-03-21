@@ -15,17 +15,20 @@ from typing import Optional, cast
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.callbacks import CallbackManagerForToolRun
 from channel import load_channel
+from websearch_state import WebSearchStateConst
 
 logger = logging.getLogger(Path(__file__).stem)
 
+
 class GoogleScholarConst:
-    NAME="google_scholar"
+    NAME = "google_scholar"
+
 
 class GoogleScholarWrapper(BaseModel):
-    download: bool = False
-    top_k_results:int =3
-    load_all_available_meta: bool = False
-    load_max_docs: int = 100
+    download: bool = WebSearchStateConst.DEFAULT_DOWNLOAD
+    top_k_results: int = WebSearchStateConst.DEFAULT_TOP_K_RESULTS
+    load_all_available_meta: bool = WebSearchStateConst.DEFAULT_LOAD_ALL_AVAILABLE_META
+    load_max_docs: int = WebSearchStateConst.DEFAULT_LOAD_MAX_DOCS
 
     def run(self, query: str) -> str:
         logger = logging.getLogger(
@@ -41,12 +44,14 @@ class GoogleScholarWrapper(BaseModel):
         docs = []
         try:
             for _ in range(self.top_k_results):
-                result=next(search_result_generator)
+                result = next(search_result_generator)
                 title = result["bib"]["title"]
                 url = result.get("eprint_url")
                 if self.load_all_available_meta:
                     extra_metadata = {
-                        "categories": result["bib"].get("fields_of_study", "No categories available"),
+                        "categories": result["bib"].get(
+                            "fields_of_study", "No categories available"
+                        ),
                         "Citations": result["num_citations"],
                     }
                 else:
@@ -54,19 +59,20 @@ class GoogleScholarWrapper(BaseModel):
                 metadata = {
                     "Authors": ", ".join(result["bib"]["author"]),
                     "Title": title,
-                    "Summary": result["bib"].get("abstract", "No abstract available"),#TODO not full abstract
+                    "Summary": result["bib"].get(
+                        "abstract", "No abstract available"
+                    ),  # TODO not full abstract
                     "Published": result["bib"]["pub_year"],
                     "links": url if url else "No URL available",
                     **extra_metadata,
                 }
                 texts = ["{}: {}".format(k, metadata[k]) for k in metadata.keys()]
                 logger.info(texts)
-                
 
                 if self.download:
                     if url is None:
-                        logger.info(f"No URL available for paper:\"{title}\"")
-                        texts.append(f"Can't download paper \"{title}\"")
+                        logger.info(f'No URL available for paper:"{title}"')
+                        texts.append(f'Can\'t download paper "{title}"')
                     else:
                         msg = json.dumps(
                             {
@@ -80,28 +86,30 @@ class GoogleScholarWrapper(BaseModel):
                         res = json.loads(res)
                         cache = load_cache()
                         if cache is None:
-                            channel=load_channel()
+                            channel = load_channel()
                             msg = "请先建立知识库！"
                             channel.show_modal("error", msg)
                             return msg
                         folder_name = cache.cached_files_dir
-                        file_name = parse.quote(title, safe = "") + '.pdf'
-                        if res['response'] == True:
+                        file_name = parse.quote(title, safe="") + ".pdf"
+                        if res["response"] == True:
                             try:
                                 res = requests.get(url)
                             except Exception as e:
                                 logger.exception(repr(e))
                             if res.status_code == 200:
-                                file_path = Path(folder_name)/file_name
+                                file_path = Path(folder_name) / file_name
                                 with open(file_path, "wb") as fp:
                                     fp.write(res.content)
                                 cache.cache_file(file_path)
-                                logger.info(f'successfully download {file_path.name}')
+                                logger.info(f"successfully download {file_path.name}")
                             else:
-                                logger.info(f"Can't download paper \"{title}\" due to a network error. status code: {res.status_code}")
-                                texts.append(f"Can't download paper \"{title}\"")
+                                logger.info(
+                                    f'Can\'t download paper "{title}" due to a network error. status code: {res.status_code}'
+                                )
+                                texts.append(f'Can\'t download paper "{title}"')
                         else:
-                            logger.info(f"Not download paper \"{title}\"")
+                            logger.info(f'Not download paper "{title}"')
                 docs.append("\n".join(texts))
         except StopIteration:
             pass
@@ -112,15 +120,18 @@ class GoogleScholarWrapper(BaseModel):
         else:
             return "No good Google Scholar Result was found"
 
+
 class ScholarInput(BaseModel):
     """Input for the Google Scholar wrapper tool."""
 
     query: str = Field(description="search query to look up")
 
+
 class GoogleScholarQueryRun(BaseTool):
     """A Goolge Scholarship Wrapper runner."""
+
     name: str = GoogleScholarConst.NAME
-    description:str = (
+    description: str = (
         "A wrapper around Google Scholar."
         "Useful for when you need to answer questions about Physics, Mathematics, "
         "Computer Science, Quantitative Biology, Quantitative Finance, Statistics, "
@@ -133,17 +144,14 @@ class GoogleScholarQueryRun(BaseTool):
 
     def _run(
         self,
-        query:str,
+        query: str,
         run_manager: Optional[CallbackManagerForToolRun] = None,
-    )->str:
-        '''Use Google Scholar wrapper'''
+    ) -> str:
+        """Use Google Scholar wrapper"""
         return self.api_wrapper.run(query)
-            
+
 
 def get_google_scholar_search_tool(**kwargs) -> BaseTool:
-    cls_properties = GoogleScholarWrapper.schema()['properties'].keys()
+    cls_properties = GoogleScholarWrapper.schema()["properties"].keys()
     sub_kwargs = {k: kwargs[k] for k in cls_properties if k in kwargs}
     return GoogleScholarQueryRun(api_wrapper=GoogleScholarWrapper(**sub_kwargs))
-
-
-

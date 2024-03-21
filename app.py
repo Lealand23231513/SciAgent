@@ -418,8 +418,8 @@ def create_ui():
                         )
                         searchPlatformDdl = gr.Dropdown(
                             label="论文检索平台",
-                            value=WebSearchStateConst.DEFAULT_WEB_SEARCH_SELECT,
-                            choices=WebSearchStateConst.TOOLS_CHOICES,#type:ignore
+                            value=WebSearchStateConst.DEFAULT_PAPER_SEARCH_SELECT,
+                            choices=WebSearchStateConst.PAPER_SEARCH_CHOICES,#type:ignore
                         )
                         gr.on(
                             [downloadChk.change,searchPlatformDdl.change],
