@@ -198,7 +198,12 @@ keyword1,keyword2,...
         raise Exception('response.choices[0].message.content is None')
     return keywords
 
-def load_qwen_agent_executor(tools_inst:list[BaseTool], model:str, api_key=None, base_url=None):
+def load_qwen_agent_executor(tools_inst:list[BaseTool], model_kwargs:dict[str,Any]):
+    model = model_kwargs.pop('model')
+    temperature = model_kwargs.pop('temperature')
+    api_key = model_kwargs.pop('api_key')
+    base_url = model_kwargs.pop('base_url')
+    llm = ChatOpenAI(model=model, temperature=temperature,api_key=api_key,base_url=base_url, model_kwargs=model_kwargs)
     llm = ChatOpenAI(model=model, temperature=0, api_key="EMPTY", base_url=base_url)#type:ignore
     if len(tools_inst)==0:
         llm_with_tools = llm

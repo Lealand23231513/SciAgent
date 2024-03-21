@@ -19,6 +19,9 @@ from channel import Channel, load_channel
 
 logger = logging.getLogger(__name__)
 
+class ArxivConst:
+    NAME='arxiv'
+
 
 class CustomArxivAPIWrapper(BaseModel):
     """
@@ -152,7 +155,7 @@ class ArxivInput(BaseModel):
 class CustomArxivQueryRun(BaseTool):
     """Tool that searches the Arxiv API."""
 
-    name: str = "arxiv"
+    name: str = ArxivConst.NAME
     description: str = (
         "A wrapper around Arxiv.org "
         "Useful for when you need to answer questions about Physics, Mathematics, "

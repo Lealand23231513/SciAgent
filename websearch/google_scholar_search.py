@@ -18,6 +18,9 @@ from channel import load_channel
 
 logger = logging.getLogger(Path(__file__).stem)
 
+class GoogleScholarConst:
+    NAME="google_scholar"
+
 class GoogleScholarWrapper(BaseModel):
     download: bool = False
     top_k_results:int =3
@@ -72,7 +75,7 @@ class GoogleScholarWrapper(BaseModel):
                                 "message": f'Do you want to download file "{title}" ?',
                             }
                         )
-                        channel = load_channel
+                        channel = load_channel()
                         res = cast(str, channel.push(msg, require_response=True))
                         res = json.loads(res)
                         cache = load_cache()
@@ -116,7 +119,7 @@ class ScholarInput(BaseModel):
 
 class GoogleScholarQueryRun(BaseTool):
     """A Goolge Scholarship Wrapper runner."""
-    name: str = "scholarship"
+    name: str = GoogleScholarConst.NAME
     description:str = (
         "A wrapper around Google Scholar."
         "Useful for when you need to answer questions about Physics, Mathematics, "

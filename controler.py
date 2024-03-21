@@ -1,5 +1,5 @@
 # 核心控制模块
-from typing import cast
+from typing import cast, Any
 import os
 import logging
 import json
@@ -22,14 +22,20 @@ from utils import load_qwen_agent_executor
 from tools import ToolsState
 from model_state import LLMState
 from channel import load_channel
-
+AGENT_START = '[AGENT START]'
+AGENT_DONE = '[AGENT DONE]'
+SEP_OF_LINE = "".join(["-" for _ in range(8)])
 logger = logging.getLogger(Path(__file__).stem)
 
 
 def load_openai_agent_excutor(
-    tools_inst: list[BaseTool], model="gpt-3.5-turbo", api_key=None, base_url=None
+    tools_inst: list[BaseTool], model_kwargs:dict[str,Any]
 ):
-    llm = ChatOpenAI(model=model, temperature=0, api_key=api_key, base_url=base_url)
+    model = model_kwargs.pop('model')
+    temperature = model_kwargs.pop('temperature')
+    api_key = model_kwargs.pop('api_key')
+    base_url = model_kwargs.pop('base_url')
+    llm = ChatOpenAI(model=model, temperature=temperature,api_key=api_key,base_url=base_url, model_kwargs=model_kwargs)
     if len(tools_inst) == 0:
         llm_with_tools = llm
     else:
@@ -53,11 +59,16 @@ def load_openai_agent_excutor(
 
 
 def load_zhipuai_agent_excutor(
-    tools_inst: list[BaseTool], model="glm-3-turbo", api_key=None, base_url=None
+    tools_inst: list[BaseTool], model_kwargs:dict[str,Any]
 ):
+    model = model_kwargs.pop('model')
+    temperature = model_kwargs.pop('temperature')
+    api_key = model_kwargs.pop('api_key')
+    base_url = model_kwargs.pop('base_url')
+    llm = ChatOpenAI(model=model, temperature=temperature,api_key=api_key,base_url=base_url, model_kwargs=model_kwargs)
     if model == "chatglm3-6b":
         api_key = "EMP.TY"
-    llm = ChatZhipuAI(model=model, temperature=0.01, api_key=api_key, base_url=base_url)
+    llm = ChatZhipuAI(model=model, temperature=temperature, api_key=api_key, base_url=base_url)
     if len(tools_inst) == 0:
         llm_with_tools = llm
     else:
@@ -101,44 +112,61 @@ def call_agent(user_input: str, stream: bool = False):
     model_kwargs = llm_state.model_dump()
     if "gpt" in llm_state.model:
         agent_executor = agent_excutor_mapping["openai"](
-            tools_state.tools_inst, **model_kwargs
+            tools_state.tools_inst, model_kwargs
         )
     elif "glm" in llm_state.model:
         agent_executor = agent_excutor_mapping["zhipuai"](
-            tools_state.tools_inst, **model_kwargs
+            tools_state.tools_inst, model_kwargs
         )
     elif "qwen" in llm_state.model:
         agent_executor = agent_excutor_mapping["qwen"](
-            tools_state.tools_inst, **model_kwargs
+            tools_state.tools_inst, model_kwargs
         )
     set_global_value("agent_executor", agent_executor)
     chat_history = cast(list[dict[str, str]], get_global_value("chat_history"))
     try:
-        ans = agent_executor.invoke(
+        yield AGENT_START
+        yield SEP_OF_LINE
+        for chunk in agent_executor.stream(
             {
                 "chat_history": [convert_dict_to_message(m) for m in chat_history],
                 "input": user_input,
             }
-        )
-        logger.info({k: ans[k] for k in ("input", "output")})
-        if stream:
-            # fake stream
-            yield from ans["output"]
-        else:
-            return ans["output"]
+        ):
+            # Agent Action
+            if "actions" in chunk:
+                for action in chunk["actions"]:
+                    yield f"Calling Tool:`{action.tool}` with input `{action.tool_input}`"
+            # Observation
+            elif "steps" in chunk:
+                for step in chunk["steps"]:
+                    yield f"Tool Result:`{step.observation}`"
+            # Final result
+            elif "output" in chunk:
+                result = chunk["output"]
+                yield f'Final Output: {chunk["output"]}'
+            else:
+                raise ValueError()
+            yield SEP_OF_LINE
+        yield AGENT_DONE
+        yield result
     except APIError as e:
         channel = load_channel()
-        channel.show_modal('error', repr(e.message))
+        channel.show_modal("error", repr(e.message))
         logger.error(e.message)
-        if stream:
-            yield from repr(e)
-        else:
-            return repr(e)
+        yield AGENT_DONE
+        yield repr(e)
+        # if stream:
+        #     yield from repr(e)
+        # else:
+        #     return repr(e)
     except Exception as e:
         channel = load_channel()
-        channel.show_modal('error', repr(e))
+        channel.show_modal("error", repr(e))
         logger.error(repr(e))
-        if stream:
-            yield from repr(e)
-        else:
-            return repr(e)
+        yield AGENT_DONE
+        yield repr(e)
+        # if stream:
+        #     yield from repr(e)
+        # else:
+        #     return repr(e)
