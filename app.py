@@ -1,8 +1,5 @@
-from tkinter.font import names
 import gradio as gr
 import logging
-
-from numpy import isin
 
 from controler import call_agent, AGENT_DONE
 from pathlib import Path
@@ -78,7 +75,6 @@ def submit(chatbot, user_input, user_input_wav, exe_log: str | None):
         exe_log = ""
     chatbot.append((user_input, None))
     yield chatbot, None, None, exe_log
-    res = None
     exe_log = cast(str, exe_log)
     generator = call_agent(
         user_input,
@@ -86,7 +82,6 @@ def submit(chatbot, user_input, user_input_wav, exe_log: str | None):
     )
     full_response = ""
     for ai_response in generator:
-        print(ai_response)
         ai_response = cast(str, ai_response)
         exe_log += ai_response + "\n"
         if ai_response == AGENT_DONE:
@@ -100,6 +95,7 @@ def submit(chatbot, user_input, user_input_wav, exe_log: str | None):
 
 def vqa_chat(history: list, user_input: Optional[str], img_path: Optional[str]):
     state.StateMutex.set_state_mutex(True)
+    mllm_state:MLLMState = global_var.get_global_value('mllm_state')
     if img_path:
         user_message = [user_input, {"type": "file", "filepath": img_path}]
     else:
@@ -125,6 +121,7 @@ def check_and_clear_pdfqa_history(filepath: str | None, txt: str, chat_history: 
 
 
 def chat_with_document(filepath: str, question: str, chat_history: list):
+    state.StateMutex.set_state_mutex(True)
     chat_history.append([question, None])
     yield chat_history, gr.Textbox(interactive=False)
     answer = document_qa_fn(filepath, question)
@@ -133,6 +130,7 @@ def chat_with_document(filepath: str, question: str, chat_history: list):
         chat_history[-1][1] += chunk
         yield chat_history, None
     yield chat_history, gr.Textbox(interactive=True)
+    state.StateMutex.set_state_mutex(False)
 
 
 def on_select(evt: gr.SelectData):
@@ -189,6 +187,7 @@ def upload(files: list[str]):
 
 
 def create_cache(namespace: str):
+    state.StateMutex.set_state_mutex(True)
     valid = True
     emb_state: EMBState = global_var.get_global_value("emb_state")
     if isinstance(namespace, str) == False or namespace == "":
@@ -199,8 +198,6 @@ def create_cache(namespace: str):
         valid = False
     if valid == False:
         return gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-    if isinstance(emb_state.api_key, str) == False or emb_state.api_key == "":
-        emb_state.api_key = None
     if isinstance(emb_state.base_url, str) == False or emb_state.base_url == "":
         emb_state.base_url = None
     cache_lst: list[str] = global_var.get_global_value("cache_lst")
@@ -215,6 +212,7 @@ def create_cache(namespace: str):
             emb_base_url=emb_state.base_url,
         )
         gr.Info(f"新的知识库“{namespace}”创建成功")
+    state.StateMutex.set_state_mutex(False)
     return (
         gr.update(value=None),
         gr.update(value=None),
@@ -622,11 +620,13 @@ def create_ui():
                             type="password",
                             value=LLMStateConst.DEFAULT_API_KEY,
                         )
+                        
                         pdfLlmBaseurlTxt = gr.Textbox(
                             label="模型baseurl",
-                            info="如使用Openai模型此栏请留空",
+                            info="如使用Openai模型此栏请留空",#BUG info不显示
                             value=LLMStateConst.DEFAULT_BASE_URL,
                         )
+                    gr.Markdown("模型上下文长度有限，请不要传入太长的文章。")
                     pdfBox = PDF(
                         label="PDF文档",
                         height=700,

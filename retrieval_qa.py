@@ -31,11 +31,11 @@ question: {question}
 
 
 class RetrievalStateConst:
-    MAX_TEMPERATURE = 1
-    MIN_TEMPERATURE = 0
+    MAX_TEMPERATURE = 0.99
+    MIN_TEMPERATURE = 0.01
     DEFAULT_TEMPERATURE = 0.5
-    MAX_TOP_P = 1
-    MIN_TOP_P = 0
+    MAX_TOP_P = 0.99
+    MIN_TOP_P = 0.01
     DEFAULT_TOP_P = 0.7
     MAX_SCORE_THRESHOLD = 1
     MIN_SCORE_THRESHOLD = 0
@@ -46,13 +46,13 @@ class RetrievalStateConst:
 class RetrievalState(BaseToolState):
     temperature: float = Field(
         default=RetrievalStateConst.DEFAULT_TEMPERATURE,
-        ge=RetrievalStateConst.MIN_TEMPERATURE,
-        le=RetrievalStateConst.MAX_TEMPERATURE,
+        gt=RetrievalStateConst.MIN_TEMPERATURE,
+        lt=RetrievalStateConst.MAX_TEMPERATURE,
     )
     top_p: float = Field(
         default=RetrievalStateConst.DEFAULT_TOP_P,
-        ge=RetrievalStateConst.MIN_TOP_P,
-        le=RetrievalStateConst.MAX_TOP_P,
+        gt=RetrievalStateConst.MIN_TOP_P,
+        lt=RetrievalStateConst.MAX_TOP_P,
     )    
     score_threshold: float = Field(
         default=RetrievalStateConst.DEFAULT_SCORE_THRESHOLD,

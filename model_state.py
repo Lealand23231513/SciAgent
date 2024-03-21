@@ -1,7 +1,41 @@
 from config import *
 from state import BaseState
-from typing import Optional
-from pydantic import model_validator, Field
+from typing import Optional, Any
+from pydantic import model_validator, Field, ConfigDict
+
+
+class BaseModelStateConst:
+    MAX_TEMPERATURE = 0.99
+    MIN_TEMPERATURE = 0.01
+    DEFAULT_TEMPERATURE = 0.5
+    MAX_TOP_P = 0.99
+    MIN_TOP_P = 0.01
+    DEFAULT_TOP_P = 0.7
+
+
+class BaseModelState(BaseState):
+    model: str
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    temperature: float = Field(
+        default=BaseModelStateConst.DEFAULT_TEMPERATURE,
+        gt=BaseModelStateConst.MIN_TEMPERATURE,
+        lt=BaseModelStateConst.MAX_TEMPERATURE,
+    )
+    top_p: float = Field(
+        default=BaseModelStateConst.DEFAULT_TOP_P,
+        gt=BaseModelStateConst.MIN_TOP_P,
+        lt=BaseModelStateConst.MAX_TOP_P,
+    )   
+    
+    @model_validator(mode="after")
+    def validate_environ(self):
+        if self.api_key== "":
+            self.api_key = None
+        if self.base_url == "":
+            self.base_url = None
+        return self
+    
 
 
 class LLMStateConst:
@@ -47,11 +81,13 @@ class MLLMState(BaseState):
         ge=MLLMStateConst.MAXIMUM_MAX_TOKENS,
     )
 
+
 class EMBStateConst:
     DEFAULT_EMB = SUPPORT_EMBS[0]
     EMB_CHOICES = SUPPORT_EMBS
     DEFAULT_API_KEY = None
     DEFAULT_BASE_URL = None
+
 
 class EMBState(BaseState):
     model: str = EMBStateConst.DEFAULT_EMB

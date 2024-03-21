@@ -1,12 +1,13 @@
 import logging
 import global_var
 from global_var import *
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Any, Optional, cast, Callable, Optional
 from config import *
 
 
 class BaseState(BaseModel):
+    model_config = ConfigDict(validate_assignment=True)
     def set_global(self, global_name: str):
         set_global_value(global_name, self)
 
