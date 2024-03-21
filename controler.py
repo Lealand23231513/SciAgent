@@ -1,5 +1,5 @@
 # 核心控制模块
-from typing import cast
+from typing import cast, Any
 import os
 import logging
 import json
@@ -29,9 +29,13 @@ logger = logging.getLogger(Path(__file__).stem)
 
 
 def load_openai_agent_excutor(
-    tools_inst: list[BaseTool], model="gpt-3.5-turbo", api_key=None, base_url=None
+    tools_inst: list[BaseTool], model_kwargs:dict[str,Any]
 ):
-    llm = ChatOpenAI(model=model, temperature=0, api_key=api_key, base_url=base_url)
+    model = model_kwargs.pop('model')
+    temperature = model_kwargs.pop('temperature')
+    api_key = model_kwargs.pop('api_key')
+    base_url = model_kwargs.pop('base_url')
+    llm = ChatOpenAI(model=model, temperature=temperature,api_key=api_key,base_url=base_url, model_kwargs=model_kwargs)
     if len(tools_inst) == 0:
         llm_with_tools = llm
     else:
@@ -55,11 +59,16 @@ def load_openai_agent_excutor(
 
 
 def load_zhipuai_agent_excutor(
-    tools_inst: list[BaseTool], model="glm-3-turbo", api_key=None, base_url=None
+    tools_inst: list[BaseTool], model_kwargs:dict[str,Any]
 ):
+    model = model_kwargs.pop('model')
+    temperature = model_kwargs.pop('temperature')
+    api_key = model_kwargs.pop('api_key')
+    base_url = model_kwargs.pop('base_url')
+    llm = ChatOpenAI(model=model, temperature=temperature,api_key=api_key,base_url=base_url, model_kwargs=model_kwargs)
     if model == "chatglm3-6b":
         api_key = "EMP.TY"
-    llm = ChatZhipuAI(model=model, temperature=0.01, api_key=api_key, base_url=base_url)
+    llm = ChatZhipuAI(model=model, temperature=temperature, api_key=api_key, base_url=base_url)
     if len(tools_inst) == 0:
         llm_with_tools = llm
     else:
@@ -103,15 +112,15 @@ def call_agent(user_input: str, stream: bool = False):
     model_kwargs = llm_state.model_dump()
     if "gpt" in llm_state.model:
         agent_executor = agent_excutor_mapping["openai"](
-            tools_state.tools_inst, **model_kwargs
+            tools_state.tools_inst, model_kwargs
         )
     elif "glm" in llm_state.model:
         agent_executor = agent_excutor_mapping["zhipuai"](
-            tools_state.tools_inst, **model_kwargs
+            tools_state.tools_inst, model_kwargs
         )
     elif "qwen" in llm_state.model:
         agent_executor = agent_excutor_mapping["qwen"](
-            tools_state.tools_inst, **model_kwargs
+            tools_state.tools_inst, model_kwargs
         )
     set_global_value("agent_executor", agent_executor)
     chat_history = cast(list[dict[str, str]], get_global_value("chat_history"))

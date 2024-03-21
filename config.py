@@ -1,11 +1,11 @@
 DEFAULT_CACHE_DIR = ".cache"
 SUPPORT_TOOLS = ['websearch', 'retrieval']
 SUPPORT_LLMS = [
+    'gpt-3.5-turbo-0125',
     'gpt-3.5-turbo',
     'chatglm3-6b',
     'glm-3-turbo',
     'glm-4',
-    'gpt-3.5-turbo-0125',
     'gpt-4',
     'qwen1.5-0.5b-chat',
     'qwen1.5-1.8b-chat',

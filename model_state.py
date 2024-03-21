@@ -38,30 +38,20 @@ class BaseModelState(BaseState):
     
 
 
-class LLMStateConst:
+class LLMStateConst(BaseModelStateConst):
     DEFAULT_LLM = SUPPORT_LLMS[0]
     LLM_CHOICES = SUPPORT_LLMS
     DEFAULT_API_KEY = None
     DEFAULT_BASE_URL = None
 
 
-class LLMState(BaseState):
+class LLMState(BaseModelState):
     model: str = LLMStateConst.DEFAULT_LLM
     api_key: Optional[str] = LLMStateConst.DEFAULT_API_KEY
     base_url: Optional[str] = LLMStateConst.DEFAULT_BASE_URL
 
-    # @model_validator(mode="after")
-    # def validate_environ(cls, values):
-    #     if values.model not in LLMStateConst.LLM_CHOICES:
-    #         raise ValueError(f"llm {values.model} is not support.")
-    #     if values.api_key == "":
-    #         values.api_key = None
-    #     if values.base_url == "":
-    #         values.base_url = None
-    #     return values
 
-
-class MLLMStateConst:
+class MLLMStateConst(BaseModelStateConst):
     DEFAULT_MLLM = SUPPORT_MLLMS[0]
     MLLM_CHOICES = SUPPORT_MLLMS
     DEFAULT_API_KEY = None
@@ -71,7 +61,7 @@ class MLLMStateConst:
     MAXIMUM_MAX_TOKENS = 1000
 
 
-class MLLMState(BaseState):
+class MLLMState(BaseModelState):
     model: str = MLLMStateConst.DEFAULT_MLLM
     api_key: Optional[str] = MLLMStateConst.DEFAULT_API_KEY
     base_url: Optional[str] = MLLMStateConst.DEFAULT_BASE_URL
@@ -82,7 +72,7 @@ class MLLMState(BaseState):
     )
 
 
-class EMBStateConst:
+class EMBStateConst(BaseModelStateConst):
     DEFAULT_EMB = SUPPORT_EMBS[0]
     EMB_CHOICES = SUPPORT_EMBS
     DEFAULT_API_KEY = None

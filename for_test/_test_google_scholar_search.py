@@ -9,7 +9,7 @@ import os
 import os
 import logging
 
-from google_scholar_search import get_google_scholar_search_tool
+from websearch.google_scholar_search import get_google_scholar_search_tool
 from pathlib import Path
 from langchain import hub
 from langchain.agents import AgentExecutor, create_openai_tools_agent

@@ -37,11 +37,11 @@ from model_state import (
 )
 from tools import (
     ToolsState,
-    WebSearchState,
-    WebSearchStateConst,
 )
 from retrieval_qa import RetrievalState, RetrievalStateConst
 from gradio_rich_textbox import RichTextbox
+
+from websearch.websearch_state import WebSearchState, WebSearchStateConst
 
 
 def _init_state_vars():
@@ -95,7 +95,7 @@ def submit(chatbot, user_input, user_input_wav, exe_log: str | None):
 
 def vqa_chat(history: list, user_input: Optional[str], img_path: Optional[str]):
     state.StateMutex.set_state_mutex(True)
-    mllm_state:MLLMState = global_var.get_global_value('mllm_state')
+    mllm_state: MLLMState = global_var.get_global_value("mllm_state")
     if img_path:
         user_message = [user_input, {"type": "file", "filepath": img_path}]
     else:
@@ -326,7 +326,7 @@ def create_ui():
         }
 
     with gr.Blocks(title="SciAgent", theme="soft") as demo:
-        with gr.Tab(label="问答"):
+        with gr.Tab(label="使用Agent"):
             with gr.Row():
                 with gr.Column(scale=3):
                     chatbot = gr.Chatbot(label="SciAgent")
@@ -374,7 +374,7 @@ def create_ui():
                     )
                     with gr.Accordion(label="模型设置"):
                         llmDdl = gr.Dropdown(
-                            choices=SUPPORT_LLMS,  # type: ignore
+                            choices=LLMStateConst.LLM_CHOICES,  # type: ignore
                             # value=llm_state.model,
                             label="模型ID",
                         )
@@ -387,30 +387,46 @@ def create_ui():
                             label="模型baseurl",
                             value=LLMStateConst.DEFAULT_BASE_URL,
                             info="如使用Openai模型此栏请留空",
+                        )  # TODO temperature, top_p control
+                        llmTempSlider = gr.Slider(
+                            label="temperature",
+                            minimum=LLMStateConst.MIN_TEMPERATURE,
+                            maximum=LLMStateConst.MAX_TEMPERATURE,
+                            value=LLMStateConst.DEFAULT_TEMPERATURE,
+                            info=f"请在0至1之间选择",
+                            interactive=True,
                         )
                         gr.on(
                             [
                                 llmDdl.change,
                                 llmApikeyDdl.change,
                                 llmBaseurlTxt.change,
+                                llmTempSlider.change,
                             ],
-                            lambda model, api_key, base_url: state.change_state(
+                            lambda model, api_key, base_url, temperature: state.change_state(
                                 "llm_state",
                                 model=model,
                                 api_key=api_key,
                                 base_url=base_url,
+                                temperature=temperature,
                             ),
-                            inputs=[llmDdl, llmApikeyDdl, llmBaseurlTxt],
+                            inputs=[llmDdl, llmApikeyDdl, llmBaseurlTxt, llmTempSlider],
                         )
                     with gr.Accordion(label="搜索设置", open=False):
                         downloadChk = gr.Checkbox(
-                            label="下载", value=WebSearchStateConst.DEFAULT_DOWNLOAD
+                            label="下载并加入知识库", value=WebSearchStateConst.DEFAULT_DOWNLOAD
                         )
-                        downloadChk.change(
-                            lambda download: state.change_state(
-                                "websearch_state", download=download
+                        searchPlatformDdl = gr.Dropdown(
+                            label="论文检索平台",
+                            value=WebSearchStateConst.DEFAULT_WEB_SEARCH_SELECT,
+                            choices=WebSearchStateConst.TOOLS_CHOICES,#type:ignore
+                        )
+                        gr.on(
+                            [downloadChk.change,searchPlatformDdl.change],
+                            lambda download, sub_tool_select: state.change_state(
+                                "websearch_state", download=download, sub_tool_select=sub_tool_select
                             ),
-                            inputs=[downloadChk],
+                            inputs = [downloadChk, searchPlatformDdl]
                         )
                     with gr.Accordion(label="RAG设置", open=False):
                         temperatureSlider = gr.Slider(
@@ -620,11 +636,19 @@ def create_ui():
                             type="password",
                             value=LLMStateConst.DEFAULT_API_KEY,
                         )
-                        
+
                         pdfLlmBaseurlTxt = gr.Textbox(
                             label="模型baseurl",
-                            info="如使用Openai模型此栏请留空",#BUG info不显示
+                            info="如使用Openai模型此栏请留空",  # BUG info不显示
                             value=LLMStateConst.DEFAULT_BASE_URL,
+                        )
+                        pdfLlmTempSlider = gr.Slider(
+                            label="temperature",
+                            minimum=LLMStateConst.MIN_TEMPERATURE,
+                            maximum=LLMStateConst.MAX_TEMPERATURE,
+                            value=LLMStateConst.DEFAULT_TEMPERATURE,
+                            info=f"请在0至1之间选择",
+                            interactive=True,
                         )
                     gr.Markdown("模型上下文长度有限，请不要传入太长的文章。")
                     pdfBox = PDF(
@@ -637,14 +661,21 @@ def create_ui():
                             pdfLlmDdl.change,
                             pdfLlmApikeyDdl.change,
                             pdfLlmBaseurlTxt.change,
+                            pdfLlmTempSlider.change,
                         ],
-                        lambda model, api_key, base_url: state.change_state(
+                        lambda model, api_key, base_url, temperature: state.change_state(
                             "pdf_llm_state",
                             model=model,
                             api_key=api_key,
                             base_url=base_url,
+                            temperature=temperature,
                         ),
-                        inputs=[pdfLlmDdl, pdfLlmApikeyDdl, pdfLlmBaseurlTxt],
+                        inputs=[
+                            pdfLlmDdl,
+                            pdfLlmApikeyDdl,
+                            pdfLlmBaseurlTxt,
+                            pdfLlmTempSlider,
+                        ],
                     )
                 with gr.Column():
                     docChatbot = gr.Chatbot(label="问答记录", height=800)
