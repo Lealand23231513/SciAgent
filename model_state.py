@@ -67,8 +67,8 @@ class MLLMState(BaseModelState):
     base_url: Optional[str] = MLLMStateConst.DEFAULT_BASE_URL
     max_tokens: int = Field(
         default=MLLMStateConst.DEFAULT_MAX_TOKENS,
-        le=MLLMStateConst.MINIMUN_MAX_TOKENS,
-        ge=MLLMStateConst.MAXIMUM_MAX_TOKENS,
+        ge=MLLMStateConst.MINIMUN_MAX_TOKENS,
+        le=MLLMStateConst.MAXIMUM_MAX_TOKENS,
     )
 
 

@@ -41,7 +41,8 @@ from tools import (
 from retrieval_qa import RetrievalState, RetrievalStateConst
 from gradio_rich_textbox import RichTextbox
 
-from websearch.websearch_state import WebSearchState, WebSearchStateConst
+from websearch.const import WebSearchStateConst
+from websearch.websearch_state import WebSearchState
 
 
 def _init_state_vars():
@@ -413,20 +414,49 @@ def create_ui():
                             inputs=[llmDdl, llmApikeyDdl, llmBaseurlTxt, llmTempSlider],
                         )
                     with gr.Accordion(label="搜索设置", open=False):
-                        downloadChk = gr.Checkbox(
-                            label="下载并加入知识库", value=WebSearchStateConst.DEFAULT_DOWNLOAD
-                        )
-                        searchPlatformDdl = gr.Dropdown(
-                            label="论文检索平台",
-                            value=WebSearchStateConst.DEFAULT_PAPER_SEARCH_SELECT,
-                            choices=WebSearchStateConst.PAPER_SEARCH_CHOICES,#type:ignore
-                        )
+                        with gr.Row():
+                            downloadChk = gr.Checkbox(
+                                label="下载并存入知识库",
+                                value=WebSearchStateConst.DEFAULT_DOWNLOAD,
+                            )
+                            enableSeSearchChk = gr.Checkbox(
+                                label="开启联网搜索",
+                                info="选择后Agent可以选择在搜索引擎搜索信息",
+                                value=WebSearchStateConst.DEFAULT_ENABLE_SE_SEARCH,
+                            )
+                        with gr.Row():
+                            paperSearchPlatformDdl = gr.Dropdown(
+                                label="论文检索平台",
+                                scale=1,
+                                value=WebSearchStateConst.DEFAULT_PAPER_SEARCH_SELECT,
+                                choices=WebSearchStateConst.PAPER_SEARCH_CHOICES,  # type:ignore
+                            )
+                            seDdl = gr.Dropdown(
+                                label="搜索引擎",
+                                scale=1,
+                                value=WebSearchStateConst.DEFAULT_SE_SELECT,
+                                choices=WebSearchStateConst.SE_CHOICES,  # type:ignore
+                            )
                         gr.on(
-                            [downloadChk.change,searchPlatformDdl.change],
-                            lambda download, sub_tool_select: state.change_state(
-                                "websearch_state", download=download, sub_tool_select=sub_tool_select
+                            [
+                                downloadChk.change,
+                                paperSearchPlatformDdl.change,
+                                enableSeSearchChk.change,
+                                seDdl.change,
+                            ],
+                            lambda download, paper_search_tool_select, enable_se_search, se_search_tool_select: state.change_state(
+                                "websearch_state",
+                                download=download,
+                                paper_search_tool_select=paper_search_tool_select,
+                                enable_se_search=enable_se_search,
+                                se_search_tool_select=se_search_tool_select,
                             ),
-                            inputs = [downloadChk, searchPlatformDdl]
+                            inputs=[
+                                downloadChk,
+                                paperSearchPlatformDdl,
+                                enableSeSearchChk,
+                                seDdl,
+                            ],
                         )
                     with gr.Accordion(label="RAG设置", open=False):
                         temperatureSlider = gr.Slider(

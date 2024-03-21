@@ -208,7 +208,7 @@ def load_qwen_agent_executor(tools_inst:list[BaseTool], model_kwargs:dict[str,An
     if len(tools_inst)==0:
         llm_with_tools = llm
     else:
-        llm_with_tools = llm.bind_tools(tools_inst,tool_choice='auto')
+        llm_with_tools = llm.bind_tools(tools_inst)
     prompt = ChatPromptTemplate.from_messages(
         [
             (

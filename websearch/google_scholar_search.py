@@ -15,13 +15,9 @@ from typing import Optional, cast
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.callbacks import CallbackManagerForToolRun
 from channel import load_channel
-from websearch_state import WebSearchStateConst
+from websearch.const import GoogleScholarConst, WebSearchStateConst
 
 logger = logging.getLogger(Path(__file__).stem)
-
-
-class GoogleScholarConst:
-    NAME = "google_scholar"
 
 
 class GoogleScholarWrapper(BaseModel):

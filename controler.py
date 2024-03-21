@@ -39,7 +39,7 @@ def load_openai_agent_excutor(
     if len(tools_inst) == 0:
         llm_with_tools = llm
     else:
-        llm_with_tools = llm.bind_tools(tools_inst, tool_choice="auto")
+        llm_with_tools = llm.bind_tools(tools_inst)
     prompt = hub.pull("hwchase17/openai-tools-agent")
     agent = (
         {
@@ -72,7 +72,7 @@ def load_zhipuai_agent_excutor(
     if len(tools_inst) == 0:
         llm_with_tools = llm
     else:
-        llm_with_tools = llm.bind_tools(tools_inst, tool_choice="auto")
+        llm_with_tools = llm.bind_tools(tools_inst)
     prompt = ChatPromptTemplate.from_messages(
         [
             (

@@ -16,13 +16,9 @@ from langchain_openai import ChatOpenAI
 from langchain_core.tools import BaseTool
 from functools import partial
 from channel import Channel, load_channel
-from websearch_state import WebSearchStateConst
+from websearch.const import ArxivConst, WebSearchStateConst
 
 logger = logging.getLogger(__name__)
-
-
-class ArxivConst:
-    NAME = "arxiv"
 
 
 class CustomArxivAPIWrapper(BaseModel):
