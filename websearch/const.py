@@ -12,6 +12,8 @@ class BingSearchConst:
     DEFAULT_CHUNK_OVERLAP = 50
     MAX_CHUNK_OVERLAP = 200
     MIN_CHUNK_OVERLAP = 0
+    DEFAULT_MAX_RETRIES = 5
+    MAX_TIME_SLEEP = 0.5
     BASE_URL = "https://cn.bing.com/"
 
 

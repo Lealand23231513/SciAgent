@@ -1,6 +1,8 @@
+import random
 import requests
+import time
 import logging
-from typing import Optional
+from typing import Optional, Any
 from langchain_core.pydantic_v1 import BaseModel, Field
 from bs4 import BeautifulSoup
 from langchain_text_splitters import CharacterTextSplitter
@@ -18,7 +20,7 @@ from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.tools import BaseTool
 from channel import load_channel
 from model_state import LLMState
-from websearch.const import BingSearchConst
+from websearch.const import BingSearchConst, WebSearchStateConst
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +55,42 @@ class BingSearchWrapper(BaseModel):
         ge=BingSearchConst.MIN_CHUNK_OVERLAP,
         le=BingSearchConst.MAX_CHUNK_OVERLAP,
     )
+    max_retries:int = BingSearchConst.DEFAULT_MAX_RETRIES
 
     def _search_url(self, query: str):
-        return self.base_url + f"search?q={query}"
+        return self.base_url + f"search?q={query}&form=ANNTH1&pc=U531"
+    
+    def _get_results_from_query(self, query:str):
+        results:list[dict[str,Any]] = []
+        for i in range(self.max_retries+1):
+            ua = UserAgent()
+            headers = {"User-Agent": ua.edge}
+            url = self._search_url(query)
+            response = requests.get(url, headers=headers)
+            time.sleep(max(random.random()*BingSearchConst.MAX_TIME_SLEEP, 0.5))
+            soup = BeautifulSoup(response.content, "html.parser")
+            for g in soup.find_all("li", class_="b_algo"):
+                anchors = g.find_all("a")
+                if anchors:
+                    link = anchors[0]["href"]
+                    # print(link)
+                    if not link.startswith("http"):
+                        continue
+                    title = g.find("h2").text
+                    item = {"title": title, "link": link}
+                    try:
+                        search_text = self.scrape_text(link)
+                    except Exception as e:
+                        raise e
+                        
+                    item["text"] = search_text
+                    results.append(item)
+                    if self.max_results and len(results) == self.max_results:
+                        break
+            logger.info({"try": i, "results": results})
+            if results:
+                break
+        return results
 
     def run(self, query: str):
         """
@@ -63,39 +98,16 @@ class BingSearchWrapper(BaseModel):
         """
         logger.info("bing search start")
         logger.info({"query": query})
-        ua = UserAgent()
-        headers = {"User-Agent": ua.random}
-        url = self._search_url(query)
+
         try:
-            response = requests.get(url, headers=headers)
+            results = self._get_results_from_query(query)
         except Exception as e:
             channel = load_channel()
             msg = repr(e)
             channel.show_modal("error", msg)
             return msg
-        soup = BeautifulSoup(response.content, "html.parser")
-        results = []
-        for g in soup.find_all("li", class_="b_algo"):
-            anchors = g.find_all("a")
-            if anchors:
-                link = anchors[0]["href"]
-                print(link)
-                if not link.startswith("http"):
-                    continue
-                title = g.find("h2").text
-                item = {"title": title, "link": link}
-                try:
-                    text = self.scrape_text(link)
-                except Exception as e:
-                    channel = load_channel()
-                    msg = repr(e)
-                    channel.show_modal("error", msg)
-                    return msg
-                item["text"] = text
-                results.append(item)
-                logger.info(item)
-                if self.max_results and len(results) == self.max_results:
-                    break
+        if len(results)==0:
+            return 'No related results found from bing'
         # TODO get api key in a better way
         text_splitter = CharacterTextSplitter(
             separator="",
@@ -104,31 +116,21 @@ class BingSearchWrapper(BaseModel):
             length_function=len,
             is_separator_regex=False,
         )
-        logger.info(results)
-        docs = text_splitter.create_documents([res["text"] for res in results])
+        metadatas = []
+        for res in results:
+            metadatas.append({k:res[k] for k in res if k!='text'})
+        docs = text_splitter.create_documents(texts = [res["text"] for res in results], metadatas=metadatas)
 
-        prompt = PromptTemplate(
-            template=prompt_template, input_variables=["context", "question"]
-        )
-        chain_type_kwargs = {"prompt": prompt}
-        llm_state: LLMState = get_global_value("llm_state")
-        qa_chain = RetrievalQA.from_chain_type(
-            llm=ChatOpenAI(model=llm_state.model, temperature=llm_state.temperature),
-            chain_type="stuff",
-            retriever=Chroma.from_documents(docs, OpenAIEmbeddings()).as_retriever(
-                search_type="similarity_search", search_kwargs={"k": self.top_k_results}
-            ),
-            chain_type_kwargs=chain_type_kwargs,
-        )
-        try:
-            ans = qa_chain.invoke({"query": query})
-        except Exception as e:
-            channel = load_channel()
-            msg = repr(e)
-            channel.show_modal("error", msg)
-            return msg
-        logger.info(ans)
-        return ans["result"]
+        db = Chroma.from_documents(docs, OpenAIEmbeddings())
+        res_docs = db.similarity_search(query,k=self.top_k_results)
+        logger.info(res_docs)
+        search_text_lst = []
+        for res_doc in res_docs:
+            metadata = res_doc.metadata
+            search_text = '\n'.join(f"{k}: {metadata[k]}" for k in metadata)
+            search_text = search_text + '\n' + f'text: {res_doc.page_content}'
+            search_text_lst.append(search_text)
+        return '\n'.join(search_text_lst)
 
     def scrape_text(self, url: str) -> str:
         """
@@ -153,6 +155,7 @@ class BingSearchWrapper(BaseModel):
             response = requests.get(url, headers=headers, timeout=8)
             if response.encoding == "ISO-8859-1":
                 response.encoding = response.apparent_encoding
+            time.sleep(max(random.random()*BingSearchConst.MAX_TIME_SLEEP, 0.5))
         except Exception as e:
             raise e
         soup = BeautifulSoup(response.text, "html.parser")
@@ -166,7 +169,7 @@ class BingSearchWrapper(BaseModel):
 
 
 class BingSearchInput(BaseModel):
-    query: str = Field(description="search query to look up")
+    query: str = Field(description="search query to look up, better in Chinese")
 
 
 class BingSearchQueryRun(BaseTool):
@@ -176,7 +179,9 @@ class BingSearchQueryRun(BaseTool):
         "Useful for when you need to find answer from the internet"
         "If you are asked some questions that you don't know the answer,"
         "you'd better try this tool."
-        "Input should be a search query."
+        "Input should be a search query, better in Chinese."
+        "Output is the search results."
+        "If you are using search results for answering questions, remember to provide link to the souce of the results."
     )
     api_wrapper: BingSearchWrapper = Field(default_factory=BingSearchWrapper)
     args_schema: Type[BaseModel] = BingSearchInput

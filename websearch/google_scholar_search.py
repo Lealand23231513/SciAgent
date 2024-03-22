@@ -133,6 +133,7 @@ class GoogleScholarQueryRun(BaseTool):
         "Computer Science, Quantitative Biology, Quantitative Finance, Statistics, "
         "Electrical Engineering, and Economics "
         "from scientific articles on Google Scholar. "
+        "Note that this tool cannot be used for searching news."
         "Input should be a search query."
     )
     api_wrapper: GoogleScholarWrapper = Field(default_factory=GoogleScholarWrapper)

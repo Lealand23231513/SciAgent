@@ -160,6 +160,7 @@ class CustomArxivQueryRun(BaseTool):
         "Computer Science, Quantitative Biology, Quantitative Finance, Statistics, "
         "Electrical Engineering, and Economics "
         "from scientific articles on arxiv.org. "
+        "Note that this tool cannot be used for searching news."
         "Input should be a search query."
     )
     api_wrapper: CustomArxivAPIWrapper = Field(default_factory=CustomArxivAPIWrapper)
