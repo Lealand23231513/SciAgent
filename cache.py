@@ -286,8 +286,11 @@ def init_cache(clear_old:bool=False, **kwargs):
             cache_lst=[]
     set_global_value('cache_lst', cache_lst)
     if CacheConst.LAST_RUNCACHE_CONFIG_PATH.exists():
-        with open(CacheConst.LAST_RUNCACHE_CONFIG_PATH) as f:
-            last_run_cache_config = cast(dict[str, Any], json.load(f))
+        try:
+            with open(CacheConst.LAST_RUNCACHE_CONFIG_PATH) as f:
+                last_run_cache_config = cast(dict[str, Any], json.load(f))
+        except Exception as e:
+            last_run_cache_config = {}
         if last_run_cache_config!=kwargs:
             if clear_old:
                 logger.info(f'last run cache config {last_run_cache_config} is different from given kwargs, so clear last run cache and build a new cache')
