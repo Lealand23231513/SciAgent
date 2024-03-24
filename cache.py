@@ -10,6 +10,9 @@ from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores.utils import DistanceStrategy
+from langchain.retrievers import ContextualCompressionRetriever
 import logging
 import copy
 from pathlib import Path
@@ -102,11 +105,20 @@ class Cache(object):
         else:
             self.emb_config = EMBState(model=emb_model_name, api_key=emb_api_key, base_url=emb_base_url)
             self.save_emb()
-        self.embedding = OpenAIEmbeddings(
-            model=self.emb_config.model,
-            api_key=self.emb_config.api_key,#type:ignore #CacheConst.EMB_MODEL_MAP[emb_model_name]["api_key"],
-            base_url=self.emb_config.base_url#CacheConst.EMB_MODEL_MAP[emb_model_name]["base_url"],
-        )
+        if self.emb_config.model=='bce-embbedding-base_v1':#TODO Complete this part
+            embedding_encode_kwargs = {'batch_size': 32, 'normalize_embeddings': True}
+            from huggingface_hub import login
+            login(self.emb_config.api_key)
+            self.embedding = HuggingFaceEmbeddings(
+                model_name='maidalun1020/bce-embedding-base_v1',
+                encode_kwargs=embedding_encode_kwargs
+            )
+        else:
+            self.embedding = OpenAIEmbeddings(
+                model=self.emb_config.model,
+                api_key=self.emb_config.api_key,#type:ignore #CacheConst.EMB_MODEL_MAP[emb_model_name]["api_key"],
+                base_url=self.emb_config.base_url#CacheConst.EMB_MODEL_MAP[emb_model_name]["base_url"],
+            )
         self.load_filenames()
         self.load_vectorstore()
         self.load_record_manager()
@@ -205,7 +217,7 @@ class Cache(object):
             raw_docs[i].metadata["source"] = Path(raw_docs[i].metadata["source"]).name
         cache_state:CacheState = get_global_value('cache_state')
         text_splitter = CharacterTextSplitter(
-            separator="\n",
+            separator="",
             chunk_size=cache_state.chunk_size,
             chunk_overlap=cache_state.chunk_overlap,
             add_start_index=add_start_index,

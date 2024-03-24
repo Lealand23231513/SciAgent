@@ -68,7 +68,9 @@ class CustomArxivAPIWrapper(BaseModel):
                 msg = "请先建立知识库！"
                 channel.show_modal("error", msg)
             cache.cache_file(written_path)  # type:ignore
-            logger.info(f"successfully download {Path(written_path).name}")
+            logger.info(f"successfully download {Path(written_path).name}")#BUG 下载后知识库界面不显示
+            # channel = load_channel()
+            
 
         logger.info("Arxiv search start")
         logger.info(f"query: {query}")
@@ -85,7 +87,6 @@ class CustomArxivAPIWrapper(BaseModel):
         except self.arxiv_exceptions as ex:
             return f"Arxiv exception: {ex}"
         docs = []
-        pool = multiprocessing.Pool()
         for result in results:
             if self.download:
                 msg = json.dumps(
@@ -105,13 +106,15 @@ class CustomArxivAPIWrapper(BaseModel):
                         msg = "请先建立知识库！"
                         channel.show_modal("error", msg)
                         return msg
-                    pool.apply_async(
-                        partial(
-                            result.download_pdf, dirpath=str(cache.cached_files_dir)
-                        ),
-                        callback=download_callback,
-                        error_callback=lambda err: logger.error(err),
-                    )
+                    try:
+                        filepath = result.download_pdf(dirpath=str(cache.cached_files_dir))
+                        download_callback(filepath)
+                    except Exception as e:
+                        logger.error(repr(e))
+                        channel = load_channel()
+                        msg = repr(e)
+                        channel.show_modal("error", msg)
+                        return msg
             if self.load_all_available_meta:
                 extra_metadata = {
                     "entry_id": result.entry_id,
@@ -135,8 +138,6 @@ class CustomArxivAPIWrapper(BaseModel):
             texts = ["{}: {}".format(k, metadata[k]) for k in metadata.keys()]
             logger.info(texts)
             docs.append("\n".join(texts))
-        pool.close()
-        pool.join()
         if docs:
             return "\n\n".join(docs)[: self.doc_content_chars_max]
         else:

@@ -97,7 +97,7 @@ class GoogleScholarWrapper(BaseModel):
                                 file_path = Path(folder_name) / file_name
                                 with open(file_path, "wb") as fp:
                                     fp.write(res.content)
-                                cache.cache_file(file_path)
+                                cache.cache_file(file_path)#BUG 下载后知识库界面不显示
                                 logger.info(f"successfully download {file_path.name}")
                             else:
                                 logger.info(

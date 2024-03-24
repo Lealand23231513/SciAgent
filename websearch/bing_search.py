@@ -58,15 +58,18 @@ class BingSearchWrapper(BaseModel):
     max_retries:int = BingSearchConst.DEFAULT_MAX_RETRIES
 
     def _search_url(self, query: str):
-        return self.base_url + f"search?q={query}&form=ANNTH1&pc=U531"
+        return self.base_url + f"search?q={query}&form=ANNTH1&pc=U531&mkt=zh-CN"
     
     def _get_results_from_query(self, query:str):
         results:list[dict[str,Any]] = []
         for i in range(self.max_retries+1):
             ua = UserAgent()
-            headers = {"User-Agent": ua.edge}
+            # headers = {"User-Agent": ua.edge}
+            headers = {'User-Agent':'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'}
+            resp = requests.get("https://cn.bing.com", headers=headers)
+            cookies = resp.cookies.get_dict()
             url = self._search_url(query)
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, timeout=1000, cookies=cookies)
             time.sleep(max(random.random()*BingSearchConst.MAX_TIME_SLEEP, 0.5))
             soup = BeautifulSoup(response.content, "html.parser")
             for g in soup.find_all("li", class_="b_algo"):

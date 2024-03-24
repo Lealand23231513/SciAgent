@@ -38,7 +38,7 @@ from model_state import (
 from tools import (
     ToolsState,
 )
-from retrieval_qa import RetrievalState, RetrievalStateConst
+from retrieval_qa import RetrievalState, RetrievalConst
 
 from websearch.const import WebSearchStateConst
 from websearch.websearch_state import WebSearchState
@@ -56,7 +56,7 @@ def _init_state_vars():
     global_var.set_global_value("tools_state", ToolsState())
     global_var.set_global_value("chat_history", [])
     global_var.set_global_value("pdf_llm_state", LLMState())
-    global_var.set_global_value("emb_state", EMBState())
+    global_var.set_global_value("new_emb_state", EMBState())
 
 
 def wav2txt(path: str, lang: str = "chinese"):
@@ -172,7 +172,6 @@ def delete_files(filenames: list[str]):
 
 
 def upload(files: list[str]):
-    cache_config = cast(dict[str, str], global_var.get_global_value("cache_config"))
     cache = load_cache()
     if cache is None:
         raise gr.Error("请先建立知识库！")
@@ -189,17 +188,20 @@ def upload(files: list[str]):
 def create_cache(namespace: str):
     state.StateMutex.set_state_mutex(True)
     valid = True
-    emb_state: EMBState = global_var.get_global_value("emb_state")
+    new_emb_state: EMBState = global_var.get_global_value("new_emb_state")
     if isinstance(namespace, str) == False or namespace == "":
         gr.Info("请输入知识库的名字")
         valid = False
-    if isinstance(emb_state.model, str) == False or emb_state.model == "":
+    if isinstance(new_emb_state.model, str) == False or new_emb_state.model == "":
         gr.Info("请选择Embbeding模型")
+        valid = False
+    if isinstance(new_emb_state.api_key, str) == False or new_emb_state.api_key == "":
+        gr.Info("请输入api-key模型")
         valid = False
     if valid == False:
         return gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-    if isinstance(emb_state.base_url, str) == False or emb_state.base_url == "":
-        emb_state.base_url = None
+    if isinstance(new_emb_state.base_url, str) == False or new_emb_state.base_url == "":
+        new_emb_state.base_url = None
     cache_lst: list[str] = global_var.get_global_value("cache_lst")
     if namespace in cache_lst:
         gr.Warning(f"知识库“{namespace}”已经存在，故无法创建")
@@ -207,9 +209,9 @@ def create_cache(namespace: str):
     else:
         cache = Cache(
             namespace=namespace,
-            emb_model_name=emb_state.model,
-            emb_api_key=emb_state.api_key,
-            emb_base_url=emb_state.base_url,
+            emb_model_name=new_emb_state.model,
+            emb_api_key=new_emb_state.api_key,
+            emb_base_url=new_emb_state.base_url,
         )
         gr.Info(f"新的知识库“{namespace}”创建成功")
     state.StateMutex.set_state_mutex(False)
@@ -458,47 +460,45 @@ def create_ui():
                             ],
                         )
                     with gr.Accordion(label="RAG设置", open=False):
-                        temperatureSlider = gr.Slider(
-                            label="temperature",
-                            minimum=RetrievalStateConst.MIN_TEMPERATURE,
-                            maximum=RetrievalStateConst.MAX_TEMPERATURE,
-                            value=RetrievalStateConst.DEFAULT_TEMPERATURE,
-                            info=f"请在0至1之间选择",
+                        strategyDdl = gr.Dropdown(
+                            label="retrieval策略",
+                            value=RetrievalConst.DEFAULT_STRATEGY,
+                            choices=RetrievalConst.STRATEGIES_CHOICES,  # type:ignore
                             interactive=True,
                         )
-                        toppSlider = gr.Slider(
-                            label="top_p",
-                            minimum=RetrievalStateConst.MIN_TOP_P,
-                            maximum=RetrievalStateConst.MAX_TOP_P,
-                            value=RetrievalStateConst.DEFAULT_TOP_P,
-                            step=0.01,
-                            info=f"请在0至1之间选择",
+                        kNum = gr.Number(
+                            label="文段数量",
+                            minimum=RetrievalConst.MINIMUM_K,
+                            maximum=RetrievalConst.MAXIMUN_K,
+                            value=RetrievalConst.DEFAULT_K,
+                            info=f"retriever从本地知识库中抽取的文段数量",
                             interactive=True,
+                            precision=0
                         )
                         scoreThresholdSlider = gr.Slider(
                             label="分数阈值",
-                            minimum=RetrievalStateConst.MIN_SCORE_THRESHOLD,
-                            maximum=RetrievalStateConst.MAX_SCORE_THRESHOLD,
-                            value=RetrievalStateConst.DEFAULT_SCORE_THRESHOLD,
+                            minimum=RetrievalConst.MIN_SCORE_THRESHOLD,
+                            maximum=RetrievalConst.MAX_SCORE_THRESHOLD,
+                            value=RetrievalConst.DEFAULT_SCORE_THRESHOLD,
                             interactive=True,
                         )
 
                         gr.on(
                             [
-                                temperatureSlider.change,
-                                toppSlider.change,
                                 scoreThresholdSlider.change,
+                                strategyDdl.change,
+                                kNum.change
                             ],
-                            lambda temperature, top_p, score_threshold: state.change_state(
+                            lambda score_threshold, strategy, k: state.change_state(
                                 "retrieval_state",
-                                temperature=temperature,
-                                top_p=top_p,
                                 score_threshold=score_threshold,
+                                strategy=strategy,
+                                k=k
                             ),
                             inputs=[
-                                temperatureSlider,
-                                toppSlider,
                                 scoreThresholdSlider,
+                                strategyDdl,
+                                kNum
                             ],
                         )
 
@@ -534,20 +534,6 @@ def create_ui():
                             info="如使用Openai模型此栏请留空",
                         )
                         newCacheButton = gr.Button(value="新建本地知识库")
-                        gr.on(
-                            [
-                                newEmbDdl.change,
-                                newEmbApiKeyDdl.change,
-                                newEmbBaseurlTxt.change,
-                            ],
-                            lambda model, api_key, base_url: state.change_state(
-                                "emb_state",
-                                model=model,
-                                api_key=api_key,
-                                base_url=base_url,
-                            ),
-                            inputs=[newEmbDdl, newEmbApiKeyDdl, newEmbBaseurlTxt],
-                        )
                     currNamespaceTxt = gr.Textbox(
                         label="当前知识库",
                         # value=cache.namespace,
@@ -558,6 +544,20 @@ def create_ui():
                         # value=cache.emb_model_name,
                         interactive=False,
                     )
+                    gr.on(
+                            [
+                                newEmbDdl.change,
+                                newEmbApiKeyDdl.change,
+                                newEmbBaseurlTxt.change,
+                            ],
+                            lambda model, api_key, base_url: state.change_state(
+                                "new_emb_state",
+                                model=model,
+                                api_key=api_key,
+                                base_url=base_url,
+                            ),
+                            inputs=[newEmbDdl, newEmbApiKeyDdl, newEmbBaseurlTxt],
+                        )
                     with gr.Accordion(label="文件管理"):
                         chunkSizeSlider = gr.Slider(
                             label="切片长度",

@@ -14,7 +14,8 @@ SUPPORT_LLMS = [
 ]
 SUPPORT_EMBS = [
     "text-embedding-ada-002",
-    'bge-m3'
+    'bge-m3',
+    'bce-embbedding-base_v1'
 ]
 EMB_MODEL_MAP = {
     "text-embedding-ada-002": {

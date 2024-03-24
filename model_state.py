@@ -1,7 +1,7 @@
 from config import *
 from state import BaseState
 from typing import Optional, Any
-from pydantic import model_validator, Field, ConfigDict
+from pydantic import field_validator, model_validator, Field, ConfigDict
 
 
 class BaseModelStateConst:
@@ -83,3 +83,10 @@ class EMBState(BaseState):
     model: str = EMBStateConst.DEFAULT_EMB
     api_key: Optional[str] = EMBStateConst.DEFAULT_API_KEY
     base_url: Optional[str] = EMBStateConst.DEFAULT_BASE_URL
+
+    @field_validator('model', mode='before')
+    @classmethod
+    def validate_model(cls, value:str):
+        if value==None:
+            value = ''
+        return value
