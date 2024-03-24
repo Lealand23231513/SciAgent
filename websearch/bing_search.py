@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 from langchain_text_splitters import CharacterTextSplitter
 from fake_useragent import UserAgent
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores.chroma import Chroma
 from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
@@ -125,7 +125,7 @@ class BingSearchWrapper(BaseModel):
         docs = text_splitter.create_documents(texts = [res["text"] for res in results], metadatas=metadatas)
 
         db = Chroma.from_documents(docs, OpenAIEmbeddings())
-        res_docs = db.similarity_search(query,k=self.top_k_results)
+        res_docs = db.similarity_search(query,k=self.top_k_results)#type:ignore
         logger.info(res_docs)
         search_text_lst = []
         for res_doc in res_docs:
