@@ -1,8 +1,6 @@
 import logging
 from pathlib import Path
 from BCEmbedding.tools.langchain import BCERerank
-from pydantic import root_validator
-from global_var import get_global_value
 from typing import Any, Callable, cast
 from cache import Cache, load_cache
 from typing import Optional, Type
@@ -11,42 +9,10 @@ from langchain_core.callbacks import CallbackManagerForToolRun
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.tools import BaseTool
 from sys import _getframe
-from channel import load_channel
-from tools import BaseToolState
-from model_state import LLMState
+from retrieval_const import RetrievalConst
 from langchain_core.documents import Document
 
 logger = logging.getLogger(Path(__file__).stem)
-
-
-class RetrievalConst:
-    MAX_SCORE_THRESHOLD = 1
-    MIN_SCORE_THRESHOLD = 0
-    DEFAULT_SCORE_THRESHOLD = 0.1
-    DEFAULT_K = 3
-    MAXIMUN_K = 10
-    MINIMUM_K = 1
-    STRATEGIES_CHOICES = ["base", "BCERerank"]
-    DEFAULT_STRATEGY = STRATEGIES_CHOICES[0]
-
-
-class RetrievalState(BaseToolState):
-    strategy: str = Field(default=RetrievalConst.DEFAULT_STRATEGY)
-    score_threshold: float = Field(
-        default=RetrievalConst.DEFAULT_SCORE_THRESHOLD,
-        ge=RetrievalConst.MIN_SCORE_THRESHOLD,
-        le=RetrievalConst.MAX_SCORE_THRESHOLD,
-    )
-    k: int = Field(
-        default=RetrievalConst.DEFAULT_K,
-        ge=RetrievalConst.MINIMUM_K,
-        le=RetrievalConst.MAXIMUN_K,
-    )
-
-    @property
-    def instance(self) -> BaseTool:
-        kwargs = self.model_dump()
-        return get_retrieval_tool(**kwargs)
 
 
 class RetrievalTool(BaseModel):
@@ -120,10 +86,10 @@ class RetrievalQueryRun(BaseTool):
 
 
 def get_retrieval_tool(**kwargs):
+    print(kwargs)
     return RetrievalQueryRun(retrieval_tool=RetrievalTool(**kwargs))
 
 
 if __name__ == "main":
     tool = get_retrieval_tool()
     print(tool.schema())
-    # tool._run()

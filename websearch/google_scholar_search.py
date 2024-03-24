@@ -84,7 +84,7 @@ class GoogleScholarWrapper(BaseModel):
                         if cache is None:
                             channel = load_channel()
                             msg = "请先建立知识库！"
-                            channel.show_modal("error", msg)
+                            channel.show_modal("warning", msg)
                             return msg
                         folder_name = cache.cached_files_dir
                         file_name = parse.quote(title, safe="") + ".pdf"
@@ -99,6 +99,7 @@ class GoogleScholarWrapper(BaseModel):
                                     fp.write(res.content)
                                 cache.cache_file(file_path)#BUG 下载后知识库界面不显示
                                 logger.info(f"successfully download {file_path.name}")
+                                channel.send_reload()
                             else:
                                 logger.info(
                                     f'Can\'t download paper "{title}" due to a network error. status code: {res.status_code}'

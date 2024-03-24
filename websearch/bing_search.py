@@ -107,7 +107,7 @@ class BingSearchWrapper(BaseModel):
         except Exception as e:
             channel = load_channel()
             msg = repr(e)
-            channel.show_modal("error", msg)
+            channel.show_modal("warning", msg)
             return msg
         if len(results)==0:
             return 'No related results found from bing'

@@ -84,9 +84,9 @@ class EMBState(BaseState):
     api_key: Optional[str] = EMBStateConst.DEFAULT_API_KEY
     base_url: Optional[str] = EMBStateConst.DEFAULT_BASE_URL
 
-    @field_validator('model', mode='before')
-    @classmethod
-    def validate_model(cls, value:str):
-        if value==None:
-            value = ''
-        return value
+    # @field_validator('model', mode='before')
+    # @classmethod
+    # def validate_model(cls, value:str):
+    #     if value:
+    #         value = 
+    #     return value

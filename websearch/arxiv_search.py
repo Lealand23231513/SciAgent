@@ -63,17 +63,19 @@ class CustomArxivAPIWrapper(BaseModel):
 
         def download_callback(written_path: str):
             cache = load_cache()
+            channel = load_channel()
             if cache is None:
-                channel = load_channel()
                 msg = "请先建立知识库！"
-                channel.show_modal("error", msg)
+                channel.show_modal("warning", msg)
+                return 
             cache.cache_file(written_path)  # type:ignore
             logger.info(f"successfully download {Path(written_path).name}")#BUG 下载后知识库界面不显示
-            # channel = load_channel()
+            channel.send_reload()
             
 
         logger.info("Arxiv search start")
         logger.info(f"query: {query}")
+        logger.info(self.dict())
         try:
             if self.is_arxiv_identifier(query):
                 results = arxiv.Search(
@@ -96,7 +98,7 @@ class CustomArxivAPIWrapper(BaseModel):
                         "message": f'Do you want to download file "{result.title}" ?',
                     }
                 )
-                channel = cast(Channel, global_var.get_global_value("channel"))
+                channel:Channel = global_var.get_global_value("channel")
                 res = cast(str, channel.push(msg, require_response=True))
                 res = json.loads(res)
                 if res["response"] == True:
@@ -104,7 +106,7 @@ class CustomArxivAPIWrapper(BaseModel):
                     if cache is None:
                         channel = load_channel()
                         msg = "请先建立知识库！"
-                        channel.show_modal("error", msg)
+                        channel.show_modal("warning", msg)
                         return msg
                     try:
                         filepath = result.download_pdf(dirpath=str(cache.cached_files_dir))
@@ -113,7 +115,7 @@ class CustomArxivAPIWrapper(BaseModel):
                         logger.error(repr(e))
                         channel = load_channel()
                         msg = repr(e)
-                        channel.show_modal("error", msg)
+                        channel.show_modal("warning", msg)
                         return msg
             if self.load_all_available_meta:
                 extra_metadata = {

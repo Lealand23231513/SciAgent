@@ -100,8 +100,8 @@ def load_zhipuai_agent_excutor(
     return agent_executor
 
 
-def call_agent(user_input: str, stream: bool = False):
-    load_dotenv()
+def call_agent(user_input: str):
+    # load_dotenv()
     llm_state = cast(LLMState, get_global_value("llm_state"))
     tools_state = cast(ToolsState, get_global_value("tools_state"))
     agent_excutor_mapping = {
@@ -150,19 +150,9 @@ def call_agent(user_input: str, stream: bool = False):
             yield SEP_OF_LINE
         yield AGENT_DONE
         yield result
-    except APIError as e:
-        channel = load_channel()
-        channel.show_modal("error", repr(e.message))
-        logger.error(e.message)
-        yield AGENT_DONE
-        yield repr(e)
-        # if stream:
-        #     yield from repr(e)
-        # else:
-        #     return repr(e)
     except Exception as e:
         channel = load_channel()
-        channel.show_modal("error", repr(e))
+        channel.show_modal("warning", repr(e))
         logger.error(repr(e))
         yield AGENT_DONE
         yield repr(e)

@@ -8,9 +8,9 @@ from venv import logger
 from grpc import Channel
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
-from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores.chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings.huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores.utils import DistanceStrategy
 from langchain.retrievers import ContextualCompressionRetriever
 import logging
@@ -76,11 +76,7 @@ class Cache(object):
         self.emb_model_name = emb_model_name
         self.namespace = namespace
         self.root_dir = CacheConst.DEFAULT_CACHE_DIR / namespace
-        cache_lst = cast(list[str], get_global_value('cache_lst'))
         atexit.register(self._prepare_del)
-        if self.namespace not in cache_lst:
-            cache_lst.append(self.namespace)
-            _write_cache_lst()
         if self.root_dir.exists() == False:
             self.root_dir.mkdir(parents=True)
         self.cache_config_path = self.root_dir / "config.json"
@@ -94,7 +90,6 @@ class Cache(object):
             "namespace": namespace,
             "emb_model_name": emb_model_name
         }
-        self.save_config()
         if self.cached_files_dir.exists() == False:
             self.cached_files_dir.mkdir(parents=True)
         self.emb_save_path = self.root_dir/'emb.pkl'
@@ -104,7 +99,6 @@ class Cache(object):
                 self.emb_config:EMBState = pickle.load(f)
         else:
             self.emb_config = EMBState(model=emb_model_name, api_key=emb_api_key, base_url=emb_base_url)
-            self.save_emb()
         if self.emb_config.model=='bce-embbedding-base_v1':#TODO Complete this part
             embedding_encode_kwargs = {'batch_size': 32, 'normalize_embeddings': True}
             from huggingface_hub import login
@@ -122,6 +116,14 @@ class Cache(object):
         self.load_filenames()
         self.load_vectorstore()
         self.load_record_manager()
+
+        # save configs
+        self.save_config()
+        self.save_emb()
+        cache_lst = cast(list[str], get_global_value('cache_lst'))
+        if self.namespace not in cache_lst:
+            cache_lst.append(self.namespace)
+            _write_cache_lst()
     
     def save_config(self):
         with open(self.cache_config_path,'w') as f:
@@ -159,15 +161,12 @@ class Cache(object):
         # load Chroma vecotrstore with OpenAI embeddings
         persist_directory = str(self.root_dir / "chroma")
         self.vectorstore = Chroma(
-            collection_name=self.namespace,
             embedding_function=self.embedding,
             persist_directory=persist_directory,
         )
         return self.vectorstore
 
     def clear_all(self):
-        self.all_files = []
-        self.save_allfiles_lst()
         for file in self.cached_files_dir.iterdir():
             file.unlink()
         logger = logging.getLogger(Path(__file__).stem)
@@ -180,6 +179,8 @@ class Cache(object):
             source_id_key="source",
         )
         logger.info(res)
+        self.all_files = []
+        self.save_allfiles_lst()
 
     def cache_file(
         self,

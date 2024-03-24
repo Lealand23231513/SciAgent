@@ -1,10 +1,11 @@
 import gradio as gr
 import logging
-
+import pathvalidate
+import os
 from controler import call_agent, AGENT_DONE
 from pathlib import Path
 from dotenv import load_dotenv
-import os
+
 from config import *
 from gradio_mchatbot import MultiModalChatbot
 from typing import Any, Optional, cast, Generator
@@ -21,6 +22,7 @@ import json
 import time
 from cache import Cache
 import wenet
+from retrieval_const import RetrievalConst
 import state
 
 from gradio_mypdf import PDF
@@ -38,7 +40,7 @@ from model_state import (
 from tools import (
     ToolsState,
 )
-from retrieval_qa import RetrievalState, RetrievalConst
+from retrieval_state import RetrievalState
 
 from websearch.const import WebSearchStateConst
 from websearch.websearch_state import WebSearchState
@@ -77,8 +79,7 @@ def submit(chatbot, user_input, user_input_wav, exe_log: str | None):
     yield chatbot, None, None, exe_log
     exe_log = cast(str, exe_log)
     generator = call_agent(
-        user_input,
-        stream=True,
+        user_input
     )
     full_response = ""
     for ai_response in generator:
@@ -192,6 +193,12 @@ def create_cache(namespace: str):
     if isinstance(namespace, str) == False or namespace == "":
         gr.Info("请输入知识库的名字")
         valid = False
+    else:
+        try:
+            pathvalidate.validate_filepath(namespace)
+        except pathvalidate.ValidationError:
+            gr.Info("请输入合法的目录名称作为知识库的名字")
+            valid = False
     if isinstance(new_emb_state.model, str) == False or new_emb_state.model == "":
         gr.Info("请选择Embbeding模型")
         valid = False
@@ -199,6 +206,7 @@ def create_cache(namespace: str):
         gr.Info("请输入api-key模型")
         valid = False
     if valid == False:
+        state.StateMutex.set_state_mutex(False)
         return gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
     if isinstance(new_emb_state.base_url, str) == False or new_emb_state.base_url == "":
         new_emb_state.base_url = None
@@ -217,7 +225,7 @@ def create_cache(namespace: str):
     state.StateMutex.set_state_mutex(False)
     return (
         gr.update(value=None),
-        gr.update(value=None),
+        gr.update(value=EMBStateConst.DEFAULT_EMB),
         gr.update(value=None, choices=cache_lst),
         gr.update(value=None),
         gr.update(value=None),
@@ -283,13 +291,20 @@ def get_timestamp():
 
 
 def create_ui():
-    def _state_change():
+    def _state_change(reload_ui: bool):
         global _state
         if _state["type"] == "funcall":
             if _state["name"] == "confirm":
                 return {
-                    modal: Modal(visible=True, allow_user_close=False),
+                    modal: gr.update(visible=True, allow_user_close=False),
                     modalMsg: _state["message"],
+                    reloadUICkb: reload_ui,
+                }
+            elif _state["name"] == "reload":
+                return {
+                    modal: gr.update(visible=False),
+                    modalMsg: "",
+                    reloadUICkb: not reload_ui,
                 }
         if _state["type"] == "modal":
             if _state["name"] == "error":
@@ -298,9 +313,10 @@ def create_ui():
                 gr.Info(cast(str, _state["message"]))
             if _state["name"] == "warning":
                 gr.Warning(cast(str, _state["message"]))
-        return {modal: Modal(visible=False), modalMsg: ""}
+        return {modal: gr.update(visible=False), modalMsg: "", reloadUICkb: reload_ui}
 
     def load_demo():
+        logger.info("load UI")
         cache: Cache | None = global_var.get_global_value("cache")
         cache_lst: list[str] = global_var.get_global_value("cache_lst")
         mllm_state: MLLMState = global_var.get_global_value("mllm_state")
@@ -352,9 +368,7 @@ def create_ui():
                             fn=lambda: global_var.set_global_value("chat_history", [])
                         )
                     exeLogTxt = gr.Textbox(
-                        label="Agent执行记录",
-                        value="\n",
-                        interactive=False
+                        label="Agent执行记录", value="\n", interactive=False
                     )
                 with gr.Column(scale=1):
                     tools_state = cast(
@@ -473,7 +487,7 @@ def create_ui():
                             value=RetrievalConst.DEFAULT_K,
                             info=f"retriever从本地知识库中抽取的文段数量",
                             interactive=True,
-                            precision=0
+                            precision=0,
                         )
                         scoreThresholdSlider = gr.Slider(
                             label="分数阈值",
@@ -487,19 +501,15 @@ def create_ui():
                             [
                                 scoreThresholdSlider.change,
                                 strategyDdl.change,
-                                kNum.change
+                                kNum.change,
                             ],
                             lambda score_threshold, strategy, k: state.change_state(
                                 "retrieval_state",
                                 score_threshold=score_threshold,
                                 strategy=strategy,
-                                k=k
+                                k=k,
                             ),
-                            inputs=[
-                                scoreThresholdSlider,
-                                strategyDdl,
-                                kNum
-                            ],
+                            inputs=[scoreThresholdSlider, strategyDdl, kNum],
                         )
 
         with gr.Tab(label="本地知识库"):
@@ -516,12 +526,12 @@ def create_ui():
                     with gr.Accordion(label="新建知识库", open=False):
                         newNamespaceTxt = gr.Textbox(
                             label="知识库名称",
-                            info="名称应为3-63个字母或者数字组成的字符串",
                         )
                         newEmbDdl = gr.Dropdown(
                             choices=EMBStateConst.EMB_CHOICES,  # type:ignore
                             multiselect=False,
                             label="Embedding模型",
+                            value=EMBStateConst.DEFAULT_EMB
                         )
                         newEmbApiKeyDdl = gr.Textbox(
                             label="模型api-key",
@@ -545,19 +555,19 @@ def create_ui():
                         interactive=False,
                     )
                     gr.on(
-                            [
-                                newEmbDdl.change,
-                                newEmbApiKeyDdl.change,
-                                newEmbBaseurlTxt.change,
-                            ],
-                            lambda model, api_key, base_url: state.change_state(
-                                "new_emb_state",
-                                model=model,
-                                api_key=api_key,
-                                base_url=base_url,
-                            ),
-                            inputs=[newEmbDdl, newEmbApiKeyDdl, newEmbBaseurlTxt],
-                        )
+                        [
+                            newEmbDdl.change,
+                            newEmbApiKeyDdl.change,
+                            newEmbBaseurlTxt.change,
+                        ],
+                        lambda model, api_key, base_url: state.change_state(
+                            "new_emb_state",
+                            model=model,
+                            api_key=api_key,
+                            base_url=base_url,
+                        ),
+                        inputs=[newEmbDdl, newEmbApiKeyDdl, newEmbBaseurlTxt],
+                    )
                     with gr.Accordion(label="文件管理"):
                         chunkSizeSlider = gr.Slider(
                             label="切片长度",
@@ -806,13 +816,18 @@ def create_ui():
         confirmBtn.click(
             confirmBtn_click, inputs=None, outputs=modal, show_progress="hidden"
         )
+        reloadUICkb = gr.Checkbox(
+            visible=False,
+        )
         gr.on(
             [cancelBtn.click, modal.blur],
             modal_blur,
             outputs=[modal],  # type: ignore
             show_progress="hidden",
         )
-        timeStampDisp.change(_state_change, inputs=None, outputs=[modal, modalMsg])
+        timeStampDisp.change(
+            _state_change, inputs=[reloadUICkb], outputs=[modal, modalMsg, reloadUICkb]
+        )
         gr.on(
             [docTxtbot.submit, docSubmitBtn.click],
             fn=chat_with_document,
@@ -824,7 +839,8 @@ def create_ui():
             [pdfBox, docTxtbot, docChatbot],
             [docChatbot, docTxtbot],
         )
-        demo.load(
+        gr.on(
+            [demo.load, reloadUICkb.change],
             fn=load_demo,
             outputs=[
                 llmDdl,
@@ -843,13 +859,18 @@ def create_ui():
                 mllmBaseurlTxt,
             ],
         )
+        # demo.load(
+        #     fn=load_demo,
+
+        # )
         dstCachedPapers.select(on_select, outputs=pdfBox, scroll_to_output=True)
     return demo
 
 
 # Launch gradio UI
 def main():
-    load_dotenv()
+    # load_dotenv()
+
     global_var._init()
     if Path(DEFAULT_CACHE_DIR).exists() == False:
         Path(DEFAULT_CACHE_DIR).mkdir(parents=True)

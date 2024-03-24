@@ -81,7 +81,7 @@ def document_qa_fn(path: str, query: str) -> str:
         return ans["output_text"]
     except Exception as e:
         channel = load_channel()
-        channel.show_modal("error", repr(e))
+        channel.show_modal("warning", repr(e))
         logger.error(repr(e))
         return repr(e)
 

@@ -28,6 +28,7 @@ class Channel(object):
                 return None
             return self.qFront2Back.get()
     def push(self, msg:str, delay=0.2, require_response = False) -> str|None:
+        print(msg)
         self.send(msg, 'back')
         if require_response == False:
             return None
@@ -42,6 +43,15 @@ class Channel(object):
                 "type": "modal",
                 "name": name,
                 "message": message,
+            }
+        )
+        self.send(msg, this='back')
+    def send_reload(self):
+        msg = json.dumps(
+            {
+                "type": "funcall",
+                "name": "reload",
+                "message": ""
             }
         )
         self.send(msg, this='back')
