@@ -39,7 +39,6 @@ from tools import (
     ToolsState,
 )
 from retrieval_qa import RetrievalState, RetrievalStateConst
-from gradio_rich_textbox import RichTextbox
 
 from websearch.const import WebSearchStateConst
 from websearch.websearch_state import WebSearchState
@@ -350,10 +349,10 @@ def create_ui():
                         clearBtn.click(
                             fn=lambda: global_var.set_global_value("chat_history", [])
                         )
-                    exeLogMkd = gr.Textbox(
+                    exeLogTxt = gr.Textbox(
                         label="Agent执行记录",
                         value="\n",
-                        # interactive=False
+                        interactive=False
                     )
                 with gr.Column(scale=1):
                     tools_state = cast(
@@ -645,8 +644,8 @@ def create_ui():
                     )
                     submitBtn.click(
                         fn=submit,
-                        inputs=[chatbot, txtbot, audio, exeLogMkd],
-                        outputs=[chatbot, txtbot, audio, exeLogMkd],
+                        inputs=[chatbot, txtbot, audio, exeLogTxt],
+                        outputs=[chatbot, txtbot, audio, exeLogTxt],
                         scroll_to_output=True,
                     )
 

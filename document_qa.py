@@ -3,7 +3,6 @@ import os
 import logging
 import openai
 import global_var
-from gradio_pdf import PDF
 from pathlib import Path
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
@@ -87,28 +86,28 @@ def document_qa_fn(path: str, query: str) -> str:
         return repr(e)
 
 
-if __name__ == "__main__":
-    dir = Path("document_qa_examples")
+# if __name__ == "__main__":
+#     dir = Path("document_qa_examples")
 
-    def fn(question: str, filepath: str) -> str:
-        output = document_qa_fn(filepath, question)
-        return output
+#     def fn(question: str, filepath: str) -> str:
+#         output = document_qa_fn(filepath, question)
+#         return output
 
-    demo = gr.Interface(
-        fn,
-        [
-            gr.Textbox(label="Question"),
-            PDF(height=1000, label="Document", min_width=300),
-        ],
-        gr.Textbox(),
-        examples=[
-            ["Who is the first writer of the paper?", str(dir / "example1.pdf")],
-            [
-                "What is the biggest advantage of the new model?",
-                str(dir / "example2.pdf"),
-            ],
-        ],
-    )
-    load_dotenv()
-    openai.api_key = os.getenv("OPENAI_API_KEY")
-    demo.launch(inbrowser=True)
+#     demo = gr.Interface(
+#         fn,
+#         [
+#             gr.Textbox(label="Question"),
+#             PDF(height=1000, label="Document", min_width=300),
+#         ],
+#         gr.Textbox(),
+#         examples=[
+#             ["Who is the first writer of the paper?", str(dir / "example1.pdf")],
+#             [
+#                 "What is the biggest advantage of the new model?",
+#                 str(dir / "example2.pdf"),
+#             ],
+#         ],
+#     )
+#     load_dotenv()
+#     openai.api_key = os.getenv("OPENAI_API_KEY")
+#     demo.launch(inbrowser=True)
