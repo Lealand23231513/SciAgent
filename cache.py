@@ -186,7 +186,8 @@ class Cache(object):
         self,
         path: str|Path,
         save_local=False,
-        add_start_index=True,
+        add_start_index=False,
+        update_ui=False
     ):
         """
         :param path: path or url of the file
@@ -240,6 +241,10 @@ class Cache(object):
         logger.debug(f"all files:{self.all_files}")
         logger.info(index_res)
         logger.info(f"The file ({Path(path).name}) has been cached")
+        if update_ui:
+            channel = load_channel()
+            channel.send_reload()
+            channel.show_modal('info',f"文件 {Path(path).name} 上传成功!")
         return index_res
 
     def delete_file(self, filename: str):

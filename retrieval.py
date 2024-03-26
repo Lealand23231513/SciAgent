@@ -1,4 +1,5 @@
 import logging
+import json
 from pathlib import Path
 from BCEmbedding.tools.langchain import BCERerank
 from typing import Any, Callable, cast
@@ -59,9 +60,9 @@ class RetrievalTool(BaseModel):
         )
         res_docs = retriever.get_relevant_documents(query)
         res_docs = cast(list[Document], res_docs)
-        result = repr([res_doc.dict() for res_doc in res_docs])
+        result = [res_doc.dict() for res_doc in res_docs]
         logger.info(result)
-        return result
+        return json.dumps(result)
 
 
 class RetrievalInput(BaseModel):
@@ -86,7 +87,6 @@ class RetrievalQueryRun(BaseTool):
 
 
 def get_retrieval_tool(**kwargs):
-    print(kwargs)
     return RetrievalQueryRun(retrieval_tool=RetrievalTool(**kwargs))
 
 

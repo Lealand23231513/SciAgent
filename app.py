@@ -96,7 +96,6 @@ def submit(chatbot, user_input, user_input_wav, exe_log: str | None):
 
 def vqa_chat(history: list, user_input: Optional[str], img_path: Optional[str]):
     state.StateMutex.set_state_mutex(True)
-    mllm_state: MLLMState = global_var.get_global_value("mllm_state")
     if img_path:
         user_message = [user_input, {"type": "file", "filepath": img_path}]
     else:
@@ -159,7 +158,8 @@ def delete_all_files():
 def delete_files(filenames: list[str]):
     cache = load_cache()
     if cache is None:
-        raise gr.Error("请先建立知识库")
+        gr.Warning('"请先建立知识库！"')
+        return gr.update(), gr.update()
     if isinstance(filenames, list) == False:
         gr.Info("请选择要删除的文章")
         filenames = []
@@ -175,11 +175,11 @@ def delete_files(filenames: list[str]):
 def upload(files: list[str]):
     cache = load_cache()
     if cache is None:
-        raise gr.Error("请先建立知识库！")
+        gr.Warning('"请先建立知识库！"')
+        return gr.update(), gr.update()
     logger.info(f"upload files:{files}")
     for filepath in files:
-        cache.cache_file(filepath, save_local=True)
-        gr.Info(f"文件 {Path(filepath).name} 上传成功!")
+        cache.cache_file(filepath, save_local=True, update_ui=True)
 
     return gr.update(
         choices=cache.all_files,  # type:ignore
@@ -431,7 +431,8 @@ def create_ui():
                     with gr.Accordion(label="搜索设置", open=False):
                         with gr.Row():
                             downloadChk = gr.Checkbox(
-                                label="下载并存入知识库",
+                                label="下载",
+                                info="仅限arxiv，将搜索到的论文下载并存入知识库",
                                 value=WebSearchStateConst.DEFAULT_DOWNLOAD,
                             )
                             enableSeSearchChk = gr.Checkbox(

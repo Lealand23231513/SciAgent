@@ -65,6 +65,7 @@ class GoogleScholarWrapper(BaseModel):
                 texts = ["{}: {}".format(k, metadata[k]) for k in metadata.keys()]
                 logger.info(texts)
 
+                self.download = False# Not support Google Scholar download
                 if self.download:
                     if url is None:
                         logger.info(f'No URL available for paper:"{title}"')
@@ -97,9 +98,8 @@ class GoogleScholarWrapper(BaseModel):
                                 file_path = Path(folder_name) / file_name
                                 with open(file_path, "wb") as fp:
                                     fp.write(res.content)
-                                cache.cache_file(file_path)#BUG 下载后知识库界面不显示
+                                cache.cache_file(file_path, update_ui=True)
                                 logger.info(f"successfully download {file_path.name}")
-                                channel.send_reload()
                             else:
                                 logger.info(
                                     f'Can\'t download paper "{title}" due to a network error. status code: {res.status_code}'

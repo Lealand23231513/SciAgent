@@ -3,12 +3,11 @@ import logging
 import re
 import arxiv
 import global_var
-import multiprocessing
 
 from pydantic.v1 import BaseModel
 from pathlib import Path
 from cache import load_cache
-from typing import Optional, Type, Any, cast
+from typing import Literal, Optional, Type, Any, cast
 from langchain_core.callbacks import CallbackManagerForToolRun
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain import hub
@@ -32,6 +31,8 @@ class CustomArxivAPIWrapper(BaseModel):
         arxiv.UnexpectedEmptyPageError,
         arxiv.HTTPError,
     )
+    # sort_criterion:arxiv.SortCriterion = arxiv.SortCriterion.Relevance
+    # sort_order:arxiv.SortOrder = arxiv.SortOrder.Descending
     top_k_results: int = WebSearchStateConst.DEFAULT_TOP_K_RESULTS
     ARXIV_MAX_QUERY_LENGTH: int = 300
     load_max_docs: int = WebSearchStateConst.DEFAULT_LOAD_MAX_DOCS
@@ -51,7 +52,12 @@ class CustomArxivAPIWrapper(BaseModel):
                 return False
         return True
 
-    def run(self, query: str) -> str:
+    def run(
+        self,
+        query: str,
+        sort_criterion: arxiv.SortCriterion,
+        sort_order: arxiv.SortOrder,
+    ) -> str:
         """
         We overwrite ArxivAPIWrapper.run() to fit into our framework
         Args:
@@ -67,28 +73,33 @@ class CustomArxivAPIWrapper(BaseModel):
             if cache is None:
                 msg = "请先建立知识库！"
                 channel.show_modal("warning", msg)
-                return 
-            cache.cache_file(written_path)  # type:ignore
-            logger.info(f"successfully download {Path(written_path).name}")#BUG 下载后知识库界面不显示
-            channel.send_reload()
-            
+                return
+            cache.cache_file(written_path, update_ui=True)  # type:ignore
+            logger.info(f"successfully download {Path(written_path).name}")
 
         logger.info("Arxiv search start")
-        logger.info(f"query: {query}")
+        logger.info(
+            f"query: {query} sort_criterion: {sort_criterion} sort_order: {sort_order}"
+        )
         logger.info(self.dict())
         try:
             if self.is_arxiv_identifier(query):
                 results = arxiv.Search(
                     id_list=query.split(),
                     max_results=self.top_k_results,
+                    sort_by=sort_criterion,
+                    sort_order=sort_order,
                 ).results()
             else:
                 results = arxiv.Search(
-                    query[: self.ARXIV_MAX_QUERY_LENGTH], max_results=self.top_k_results
+                    query[: self.ARXIV_MAX_QUERY_LENGTH],
+                    max_results=self.top_k_results,
+                    sort_by=sort_criterion,
+                    sort_order=sort_order,
                 ).results()
         except self.arxiv_exceptions as ex:
             return f"Arxiv exception: {ex}"
-        docs = []
+        metadatas: list[dict[str, Any]] = []
         for result in results:
             if self.download:
                 msg = json.dumps(
@@ -98,7 +109,7 @@ class CustomArxivAPIWrapper(BaseModel):
                         "message": f'Do you want to download file "{result.title}" ?',
                     }
                 )
-                channel:Channel = global_var.get_global_value("channel")
+                channel: Channel = global_var.get_global_value("channel")
                 res = cast(str, channel.push(msg, require_response=True))
                 res = json.loads(res)
                 if res["response"] == True:
@@ -109,7 +120,9 @@ class CustomArxivAPIWrapper(BaseModel):
                         channel.show_modal("warning", msg)
                         return msg
                     try:
-                        filepath = result.download_pdf(dirpath=str(cache.cached_files_dir))
+                        filepath = result.download_pdf(
+                            dirpath=str(cache.cached_files_dir)
+                        )
                         download_callback(filepath)
                     except Exception as e:
                         logger.error(repr(e))
@@ -137,13 +150,31 @@ class CustomArxivAPIWrapper(BaseModel):
                 "Links": [link.href for link in result.links],
                 **extra_metadata,
             }
-            texts = ["{}: {}".format(k, metadata[k]) for k in metadata.keys()]
-            logger.info(texts)
-            docs.append("\n".join(texts))
-        if docs:
-            return "\n\n".join(docs)[: self.doc_content_chars_max]
+            metadatas.append(metadata)
+        if metadatas:
+            return self.output_parser(metadatas, schema="json")
         else:
             return "No good Arxiv Result was found"
+
+    def output_parser(
+        self, raw_output: list[dict[str, Any]], schema: Literal["str", "json", "python"]
+    ):
+        if schema == "str":
+            docs = []
+            for metadata in raw_output:
+                texts = ["{}: {}".format(k, metadata[k]) for k in metadata.keys()]
+                docs.append("\n".join(texts))
+            logger.info(docs)
+            return "\n\n".join(docs)[: self.doc_content_chars_max]
+        elif schema == "python":
+            logger.info(raw_output)
+            return repr(raw_output)
+        elif schema == "json":
+            output = json.dumps(raw_output)
+            logger.info(output)
+            return output
+        else:
+            raise ValueError(f"Error schema: {schema}")
 
 
 # below comes from langchain_community.utilities.arxiv.tools
@@ -151,6 +182,10 @@ class ArxivInput(BaseModel):
     """Input for the Arxiv tool."""
 
     query: str = Field(description="search query to look up")
+    sort_by: Literal["relevance", "lastUpdatedDate", "submittedDate"] = Field(
+        description="sort criterion"
+    )
+    sort_order: Literal["ascending", "descending"] = Field(description="search order")
 
 
 class CustomArxivQueryRun(BaseTool):
@@ -172,10 +207,23 @@ class CustomArxivQueryRun(BaseTool):
     def _run(
         self,
         query: str,
+        sort_by: Literal["relevance", "lastUpdatedDate", "submittedDate"],
+        sort_order: Literal["ascending", "descending"],
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
         """Use the Arxiv tool."""
-        return self.api_wrapper.run(query)
+        sort_by_map = {
+            "relevance": arxiv.SortCriterion.Relevance,
+            "lastUpdatedDate": arxiv.SortCriterion.LastUpdatedDate,
+            "submittedDate": arxiv.SortCriterion.SubmittedDate,
+        }
+        sort_order_map = {
+            "ascending": arxiv.SortOrder.Ascending,
+            "descending": arxiv.SortOrder.Descending,
+        }
+        return self.api_wrapper.run(
+            query, sort_by_map[sort_by], sort_order_map[sort_order]
+        )
 
 
 def get_customed_arxiv_search_tool(**kwargs) -> BaseTool:
