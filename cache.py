@@ -1,112 +1,145 @@
-from langchain.text_splitter import CharacterTextSplitter
-from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
-from langchain_community.vectorstores import Chroma
-from langchain_openai import OpenAIEmbeddings
 import logging
-from pathlib import Path
 import shutil
 import json
+import atexit
+import pickle
+from model_state import EMBState, EMBStateConst
+from venv import logger
+from grpc import Channel
+from langchain.text_splitter import CharacterTextSplitter
+from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
+from langchain_community.vectorstores.chroma import Chroma
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.embeddings.huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores.utils import DistanceStrategy
+from langchain.retrievers import ContextualCompressionRetriever
+import logging
+import copy
+from pathlib import Path
+
 from langchain.indexes import SQLRecordManager, index
 from typing import Any, Literal, cast
+
+from librosa import cache
 from global_var import get_global_value, set_global_value
-from config import DEFAULT_CACHE_DIR, EMB_MODEL_MAP, DEFAULT_CACHE_NAMESPACE, DEFAULT_EMB_MODEL_NAME
+from config import DEFAULT_CACHE_DIR, EMB_MODEL_MAP
 from typing import cast, List, Optional
-import logging
+from state import BaseState
+from channel import load_channel
+from pydantic import Field
 
+class CacheConst():
+    DEFAULT_CACHE_DIR=Path(DEFAULT_CACHE_DIR)
+    LAST_RUNCACHE_CONFIG_PATH =DEFAULT_CACHE_DIR/"lastrun-settings.json"
+    CACHE_LIST_PATH=DEFAULT_CACHE_DIR/"cache_list.json"
+    EMB_MODEL_MAP=EMB_MODEL_MAP
+    MAX_CHUNK_SIZE = 4000
+    MIN_CHUNK_SIZE = 500
+    DEFAULT_CHUNK_SIZE = 1000
+    MAX_CHUNK_OVERLAP = 200
+    MIN_CHUNK_OVERLAP = 50
+    DEFAULT_CHUNK_OVERLAP = 200
 
-def init_cache(clear_old:bool=False,**kwargs):
-    '''
-    :param clear_old: if True, will delete old cache if last run cache config is different from given kwargs
-    :param kwargs: kwargs of Cache
-    '''
-    logger = logging.getLogger(Path(__file__).stem+'init_cache')
-    default_cache_dir = Path(DEFAULT_CACHE_DIR)
-    last_run_cache_config_path = default_cache_dir / "lastrun-settings.json"
-    if default_cache_dir.exists() == False:
-        default_cache_dir.mkdir(parents=True)
-    if last_run_cache_config_path.exists():
-        with open(last_run_cache_config_path) as f:
-            last_run_cache_config = cast(dict[str, Any], json.load(f))
-        if last_run_cache_config!=kwargs:
-            if clear_old:
-                logger.info(f'last run cache config {last_run_cache_config} is different from given kwargs, so clear last run cache and build a new cache')
-                cache=Cache(**last_run_cache_config)
-                cache.clear_all()
-            last_run_cache_config.update(kwargs)
-            with open(last_run_cache_config_path, "w") as f:
-                json.dump(last_run_cache_config, f)
-        cache = Cache(**last_run_cache_config)
-    else:
-        logger.info("Can't find last run config, will create a config file")
-        last_run_cache_config_path.touch()
-        cache = Cache(**kwargs)
-        last_run_cache_config = {
-            "namespace": cache.namespace,
-            "emb_model_name": cache.emb_model_name,
-        }
-        with open(last_run_cache_config_path, "w") as f:
-            json.dump(last_run_cache_config, f)
-    set_global_value('cache', cache)
-    set_global_value('cache_config', last_run_cache_config)
-    return cache
+class CacheState(BaseState):
+    chunk_size: int = Field(
+        default=CacheConst.DEFAULT_CHUNK_SIZE,
+        ge=CacheConst.MIN_CHUNK_SIZE,
+        le=CacheConst.MAX_CHUNK_SIZE,
+    )
+    chunk_overlap: int = Field(
+        default=CacheConst.DEFAULT_CHUNK_OVERLAP,
+        ge=CacheConst.MIN_CHUNK_OVERLAP,
+        le=CacheConst.MAX_CHUNK_OVERLAP,
+    )
 
+def _clear_last_run_cache(**last_run_cache_config):
+    cache=Cache(**last_run_cache_config)
+    cache.clear_all()
 
+def _write_last_run_cache_config(last_run_cache_config:dict[str,str]):
+    with open(CacheConst.LAST_RUNCACHE_CONFIG_PATH, "w") as f:
+        json.dump(last_run_cache_config, f)
 
-def load_cache():
-    try:
-        cache = cast(Cache, get_global_value("cache"))
-    except Exception as e:
-        logger = logging.getLogger(Path(__file__).stem)
-        logger.error(repr(e))
-        raise e
-    return cache
-
+def _write_cache_lst():
+    cache_lst = get_global_value('cache_lst')
+    with open(CacheConst.CACHE_LIST_PATH,'w') as f:
+        json.dump(cache_lst,f)
 
 class Cache(object):
     def __init__(
         self,
-        namespace: str = DEFAULT_CACHE_NAMESPACE,
-        emb_model_name: str = DEFAULT_EMB_MODEL_NAME,
-        all_files: Optional[List[str]] = None,
-        vectorstore=None,
-        record_manager=None,
+        namespace: str,
+        emb_model_name: str,
+        emb_api_key:Optional[str]=None,
+        emb_base_url:Optional[str]=None
     ) -> None:
         self.emb_model_name = emb_model_name
         self.namespace = namespace
-        self.root_dir = Path(DEFAULT_CACHE_DIR) / namespace / emb_model_name
+        self.root_dir = CacheConst.DEFAULT_CACHE_DIR / namespace
+        atexit.register(self._prepare_del)
         if self.root_dir.exists() == False:
             self.root_dir.mkdir(parents=True)
-        self.filenames_save_path = self.root_dir / "cached-files.json"
-        if self.filenames_save_path.exists() == False:
-            self.filenames_save_path.touch()
-            with open(self.filenames_save_path,'w') as f:
+        self.cache_config_path = self.root_dir / "config.json"
+        self.allfiles_lst_path = self.root_dir / "cached-files.json"
+        if self.allfiles_lst_path.exists() == False:
+            self.allfiles_lst_path.touch()
+            with open(self.allfiles_lst_path,'w') as f:
                 json.dump([],f)
         self.cached_files_dir = self.root_dir / "cached-files"
+        self.config = {
+            "namespace": namespace,
+            "emb_model_name": emb_model_name
+        }
         if self.cached_files_dir.exists() == False:
             self.cached_files_dir.mkdir(parents=True)
-        self.embedding = OpenAIEmbeddings(
-            model=emb_model_name,
-            api_key=EMB_MODEL_MAP[emb_model_name]["api_key"],
-            base_url=EMB_MODEL_MAP[emb_model_name]["base_url"],
-        )
-        # TODO: customed embedding
-        if all_files is None:
-            self.load_filenames()
+        self.emb_save_path = self.root_dir/'emb.pkl'
+        
+        if self.emb_save_path.exists() and emb_api_key is None and emb_base_url is None:
+            with open(self.emb_save_path,'rb') as f:
+                self.emb_config:EMBState = pickle.load(f)
         else:
-            self.all_files = all_files
-        if vectorstore is None:
-            self.load_vectorstore()
+            self.emb_config = EMBState(model=emb_model_name, api_key=emb_api_key, base_url=emb_base_url)
+        if self.emb_config.model=='bce-embbedding-base_v1':#TODO Complete this part
+            embedding_encode_kwargs = {'batch_size': 32, 'normalize_embeddings': True}
+            from huggingface_hub import login
+            login(self.emb_config.api_key)
+            self.embedding = HuggingFaceEmbeddings(
+                model_name='maidalun1020/bce-embedding-base_v1',
+                encode_kwargs=embedding_encode_kwargs
+            )
         else:
-            self.vectorstore = vectorstore
-        if record_manager is None:
-            self.load_record_manager()
-        else:
-            self.record_manager = record_manager
+            self.embedding = OpenAIEmbeddings(
+                model=self.emb_config.model,
+                api_key=self.emb_config.api_key,#type:ignore #CacheConst.EMB_MODEL_MAP[emb_model_name]["api_key"],
+                base_url=self.emb_config.base_url#CacheConst.EMB_MODEL_MAP[emb_model_name]["base_url"],
+            )
+        self.load_filenames()
+        self.load_vectorstore()
+        self.load_record_manager()
+
+        # save configs
+        self.save_config()
+        self.save_emb()
+        cache_lst = cast(list[str], get_global_value('cache_lst'))
+        if self.namespace not in cache_lst:
+            cache_lst.append(self.namespace)
+            _write_cache_lst()
+    
+    def save_config(self):
+        with open(self.cache_config_path,'w') as f:
+            json.dump(self.config,f)
+    def save_allfiles_lst(self):
+        # save cached files' name
+        with open(self.allfiles_lst_path, "w") as f:
+            json.dump(self.all_files, f)
+    def save_emb(self):
+        with open(self.emb_save_path, 'wb') as f:
+            pickle.dump(self.emb_config,f)
 
     def load_filenames(self):
         # load cached files' name
         try:
-            with open(self.filenames_save_path) as f:
+            with open(self.allfiles_lst_path) as f:
                 self.all_files = cast(list[str], json.load(f))
         except Exception as e:
             logger = logging.getLogger(Path(__file__).stem+'.load_filenames')
@@ -119,7 +152,7 @@ class Cache(object):
         self.record_manager = SQLRecordManager(
             self.namespace + self.emb_model_name,
             db_url="sqlite:///"
-            + f"{DEFAULT_CACHE_DIR}/{self.namespace}/{self.emb_model_name}/record_manager_cache.sql",
+            + f"{str(CacheConst.DEFAULT_CACHE_DIR)}/{self.namespace}/record_manager_cache.sql",
         )
         self.record_manager.create_schema()
         return self.record_manager
@@ -128,22 +161,12 @@ class Cache(object):
         # load Chroma vecotrstore with OpenAI embeddings
         persist_directory = str(self.root_dir / "chroma")
         self.vectorstore = Chroma(
-            collection_name=self.emb_model_name,
             embedding_function=self.embedding,
             persist_directory=persist_directory,
         )
         return self.vectorstore
 
-    def save_filenames(self):
-        # save cached files' name
-        with open(self.filenames_save_path, "w") as f:
-            json.dump(self.all_files, f)
-
     def clear_all(self):
-        # clear all cached data
-        # TODO clear cached files
-        self.all_files = []
-        self.save_filenames()
         for file in self.cached_files_dir.iterdir():
             file.unlink()
         logger = logging.getLogger(Path(__file__).stem)
@@ -156,15 +179,15 @@ class Cache(object):
             source_id_key="source",
         )
         logger.info(res)
-        return res
+        self.all_files = []
+        self.save_allfiles_lst()
 
     def cache_file(
         self,
         path: str|Path,
         save_local=False,
-        chunk_size=1000,
-        chunk_overlap=200,
-        add_start_index=True,
+        add_start_index=False,
+        update_ui=False
     ):
         """
         :param path: path or url of the file
@@ -194,10 +217,11 @@ class Cache(object):
         raw_docs = loader.load()
         for i in range(len(raw_docs)):
             raw_docs[i].metadata["source"] = Path(raw_docs[i].metadata["source"]).name
+        cache_state:CacheState = get_global_value('cache_state')
         text_splitter = CharacterTextSplitter(
-            separator="\n",
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
+            separator="",
+            chunk_size=cache_state.chunk_size,
+            chunk_overlap=cache_state.chunk_overlap,
             add_start_index=add_start_index,
         )
         docs = text_splitter.split_documents(raw_docs)
@@ -212,11 +236,15 @@ class Cache(object):
             cleanup="incremental",
             source_id_key="source",
         )
-        self.save_filenames()
+        self.save_allfiles_lst()
         logger = logging.getLogger(Path(__file__).stem)
         logger.debug(f"all files:{self.all_files}")
         logger.info(index_res)
         logger.info(f"The file ({Path(path).name}) has been cached")
+        if update_ui:
+            channel = load_channel()
+            channel.send_reload()
+            channel.show_modal('info',f"文件 {Path(path).name} 上传成功!")
         return index_res
 
     def delete_file(self, filename: str):
@@ -227,9 +255,6 @@ class Cache(object):
             self.vectorstore.delete(uids_to_delete)
             self.record_manager.delete_keys(uids_to_delete)
             num_deleted += len(uids_to_delete)
-            all_files_set = set(self.all_files)
-            all_files_set.discard(filename)
-            self.all_files = list(all_files_set)
             logger.info(f"The file ({filename}) has been deleted")
         delete_res = {
             "num_added": 0,
@@ -237,15 +262,92 @@ class Cache(object):
             "num_skipped": 0,
             "num_deleted": num_deleted,
         }
+        self.all_files=[f for f in self.all_files if f!=filename]
+        self.save_allfiles_lst()
         logger.info(delete_res)
-        return delete_res
+    def delete_cache(self):
+        '''
+        delete cache in default cache dir
+        '''
+        self.clear_all()
+        self.emb_save_path.unlink()
+        self.cache_config_path.unlink()
+        self.allfiles_lst_path.unlink()
+        cache_lst = get_global_value('cache_lst')
+        cache_lst = [item for item in cache_lst if item!=self.namespace]
+        set_global_value('cache_lst',cache_lst)
+        _write_cache_lst()
+        logger.info(f'delete cache {self.namespace}')
+    def _prepare_del(self):
+        self.save_allfiles_lst()
+    def __del__(self):
+        pass
 
-    # def __deepcopy__(self, memo=None):
-    #     '''
-    #     Out of use
-    #     '''
-    #     from copy import deepcopy
-    #     newCache = Cache(
-    #         all_files=deepcopy(self.all_files)
-    #         )
-    #     return newCache
+def init_cache(clear_old:bool=False, **kwargs):
+    '''
+    :param clear_old: if True, will delete old cache if last run cache config is different from given kwargs
+    :param kwargs: kwargs of Cache
+    :param create_only: if True, only create a new cache, not change current cache config
+    '''
+    logger = logging.getLogger(Path(__file__).stem+'init_cache')
+    if CacheConst.DEFAULT_CACHE_DIR.exists() == False:
+        CacheConst.DEFAULT_CACHE_DIR.mkdir(parents=True)
+    if CacheConst.CACHE_LIST_PATH.exists()==False:
+        CacheConst.CACHE_LIST_PATH.touch()
+        with open(CacheConst.CACHE_LIST_PATH,'w') as f:
+            json.dump([],f)
+    with open(CacheConst.CACHE_LIST_PATH) as f:
+        try:
+            cache_lst = cast(list[str], json.load(f))
+        except Exception as e:
+            logger.error(repr(e))
+            cache_lst=[]
+    set_global_value('cache_lst', cache_lst)
+    if CacheConst.LAST_RUNCACHE_CONFIG_PATH.exists():
+        try:
+            with open(CacheConst.LAST_RUNCACHE_CONFIG_PATH) as f:
+                last_run_cache_config = cast(dict[str, Any], json.load(f))
+        except Exception as e:
+            last_run_cache_config = {}
+        if last_run_cache_config!=kwargs:
+            if clear_old:
+                logger.info(f'last run cache config {last_run_cache_config} is different from given kwargs, so clear last run cache and build a new cache')
+                _clear_last_run_cache(**last_run_cache_config)
+            last_run_cache_config.update(kwargs)
+        new_cache_config:dict[str,Any] = last_run_cache_config   
+    else:
+        logger.info("Can't find last run config, will create a config file")
+        CacheConst.LAST_RUNCACHE_CONFIG_PATH.touch()
+        new_cache_config = {}
+    _write_last_run_cache_config(new_cache_config)
+    if new_cache_config:
+        cache = Cache(**new_cache_config)
+        set_global_value('cache', cache)
+        set_global_value('cache_config', new_cache_config)
+    cache_state = CacheState()
+    set_global_value('cache_state', cache_state)
+
+
+
+def load_cache(namespace:Optional[str]=None) -> Cache|None:
+    if namespace:
+        cache_path = CacheConst.DEFAULT_CACHE_DIR /namespace
+        if cache_path.exists():
+            cache_config_path = cache_path / 'config.json'
+            with open(cache_config_path) as f:
+                cache_config:dict[str,Any] = json.load(f)
+            cache = Cache(**cache_config)
+            return cache
+        else:
+            raise ValueError(f'cache with namespace \'{namespace}\' not exist!')
+    else:
+        cache:Cache = get_global_value('cache')
+        return cache
+
+
+def change_running_cache(namespace:str):
+    cache:Cache=load_cache(namespace)#type:ignore
+    set_global_value('cache', cache)
+    set_global_value('cache_cofig', cache.config)
+    _write_last_run_cache_config(cache.config)
+    return cache

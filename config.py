@@ -1,11 +1,11 @@
 DEFAULT_CACHE_DIR = ".cache"
-TOOLS_LIST = ['websearch', 'retrieval']
+SUPPORT_TOOLS = ['websearch', 'retrieval']
 SUPPORT_LLMS = [
+    'gpt-3.5-turbo-0125',
     'gpt-3.5-turbo',
     'chatglm3-6b',
     'glm-3-turbo',
     'glm-4',
-    'gpt-3.5-turbo-0125',
     'gpt-4',
     'qwen1.5-0.5b-chat',
     'qwen1.5-1.8b-chat',
@@ -14,7 +14,8 @@ SUPPORT_LLMS = [
 ]
 SUPPORT_EMBS = [
     "text-embedding-ada-002",
-    'bge-m3'
+    'bge-m3',
+    'bce-embbedding-base_v1'
 ]
 EMB_MODEL_MAP = {
     "text-embedding-ada-002": {

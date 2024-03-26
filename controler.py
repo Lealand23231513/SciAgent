@@ -1,34 +1,45 @@
 # 核心控制模块
-from typing import Mapping
+from typing import cast, Any
 import os
 import logging
+import json
 from pathlib import Path
 from dotenv import load_dotenv
 from langchain_community.adapters.openai import convert_dict_to_message
 from langchain import hub
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
-from arxiv_search import get_customed_arxiv_search_tool
-from retrieval_qa import get_retrieval_tool
-from global_var import set_global_value
+from openai import APIError, APIStatusError, OpenAIError, APIConnectionError
+from global_var import get_global_value, set_global_value
 from langchain.agents.format_scratchpad.openai_tools import (
     format_to_openai_tool_messages,
 )
 from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
 from langchain.agents import AgentExecutor
 from langchain_zhipu import ChatZhipuAI
-from functools import partial
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from utils import load_qwen_agent_executor
-
+from tools import ToolsState
+from model_state import LLMState
+from channel import load_channel
+AGENT_START = '[AGENT START]'
+AGENT_DONE = '[AGENT DONE]'
+SEP_OF_LINE = "".join(["-" for _ in range(8)])
 logger = logging.getLogger(Path(__file__).stem)
 
-def load_openai_agent_excutor(tools_inst:list[BaseTool], model='gpt-3.5-turbo'):
-    llm = ChatOpenAI(model=model, temperature=0, api_key=os.getenv('OPENAI_API_KEY'))# type:ignore
-    if len(tools_inst)==0:
+
+def load_openai_agent_excutor(
+    tools_inst: list[BaseTool], model_kwargs:dict[str,Any]
+):
+    model = model_kwargs.pop('model')
+    temperature = model_kwargs.pop('temperature')
+    api_key = model_kwargs.pop('api_key')
+    base_url = model_kwargs.pop('base_url')
+    llm = ChatOpenAI(model=model, temperature=temperature,api_key=api_key,base_url=base_url, model_kwargs=model_kwargs)
+    if len(tools_inst) == 0:
         llm_with_tools = llm
     else:
-        llm_with_tools = llm.bind_tools(tools_inst,tool_choice='auto')
+        llm_with_tools = llm.bind_tools(tools_inst)
     prompt = hub.pull("hwchase17/openai-tools-agent")
     agent = (
         {
@@ -41,22 +52,27 @@ def load_openai_agent_excutor(tools_inst:list[BaseTool], model='gpt-3.5-turbo'):
         | llm_with_tools
         | OpenAIToolsAgentOutputParser()
     )
-    agent_executor = AgentExecutor(agent=agent, #type: ignore
-                                   tools=tools_inst, handle_parsing_errors=True)
+    agent_executor = AgentExecutor(
+        agent=agent, tools=tools_inst, handle_parsing_errors=True  # type: ignore
+    )
     return agent_executor
 
-def load_zhipuai_agent_excutor(tools_inst:list[BaseTool], model='glm-3-turbo'):
-    if model=='chatglm3-6b':
-        base_url = os.getenv('CHATGLM3_BASE_URL')
+
+def load_zhipuai_agent_excutor(
+    tools_inst: list[BaseTool], model_kwargs:dict[str,Any]
+):
+    model = model_kwargs.pop('model')
+    temperature = model_kwargs.pop('temperature')
+    api_key = model_kwargs.pop('api_key')
+    base_url = model_kwargs.pop('base_url')
+    llm = ChatOpenAI(model=model, temperature=temperature,api_key=api_key,base_url=base_url, model_kwargs=model_kwargs)
+    if model == "chatglm3-6b":
         api_key = "EMP.TY"
-    else:
-        base_url = os.getenv('ZHIPUAI_BASE_URL')
-        api_key = os.getenv('ZHIPUAI_API_KEY')
-    llm = ChatZhipuAI(model=model, temperature=0.01, api_key=api_key, base_url=base_url)
-    if len(tools_inst)==0:
+    llm = ChatZhipuAI(model=model, temperature=temperature, api_key=api_key, base_url=base_url)
+    if len(tools_inst) == 0:
         llm_with_tools = llm
     else:
-        llm_with_tools = llm.bind_tools(tools_inst,tool_choice='auto')
+        llm_with_tools = llm.bind_tools(tools_inst)
     prompt = ChatPromptTemplate.from_messages(
         [
             (
@@ -78,40 +94,69 @@ def load_zhipuai_agent_excutor(tools_inst:list[BaseTool], model='glm-3-turbo'):
         | llm_with_tools
         | OpenAIToolsAgentOutputParser()
     )
-    agent_executor = AgentExecutor(agent=agent, #type: ignore
-                                   tools=tools_inst, handle_parsing_errors=True)
+    agent_executor = AgentExecutor(
+        agent=agent, tools=tools_inst, handle_parsing_errors=True  # type: ignore
+    )
     return agent_executor
 
 
-def call_agent(user_input:str, history:list[Mapping[str,str]], tools_choice:list, model:str, retrieval_temp:float, stream:bool = False):
-    load_dotenv()
-    
-    tools_mapping = {
-        "websearch": partial(get_customed_arxiv_search_tool, load_all_available_meta=True),
-        "retrieval": get_retrieval_tool
-    }
-    tools_inst = [tools_mapping[tool['name']](**tool['kwargs']) for tool in tools_choice]
+def call_agent(user_input: str):
+    # load_dotenv()
+    llm_state = cast(LLMState, get_global_value("llm_state"))
+    tools_state = cast(ToolsState, get_global_value("tools_state"))
     agent_excutor_mapping = {
         "openai": load_openai_agent_excutor,
         "zhipuai": load_zhipuai_agent_excutor,
         "qwen": load_qwen_agent_executor,
     }
-    if 'gpt' in model:
-        agent_executor = agent_excutor_mapping['openai'](tools_inst, model)
-    elif 'glm' in model:
-        agent_executor = agent_excutor_mapping['zhipuai'](tools_inst, model)
-    elif 'qwen' in model:
-        agent_executor = agent_excutor_mapping['qwen'](tools_inst, model)
-    set_global_value('agent_executor', agent_executor)
-    ans = agent_executor.invoke(
-        {
-            "chat_history":[convert_dict_to_message(m) for m in history],
-            "input": user_input
-        }
-    )
-    logger.info({k:ans[k] for k in ('input', 'output')})
-    if stream:
-        # fake stream
-        yield from ans['output']
-    else:
-        return ans['output']
+    model_kwargs = llm_state.model_dump()
+    if "gpt" in llm_state.model:
+        agent_executor = agent_excutor_mapping["openai"](
+            tools_state.tools_inst, model_kwargs
+        )
+    elif "glm" in llm_state.model:
+        agent_executor = agent_excutor_mapping["zhipuai"](
+            tools_state.tools_inst, model_kwargs
+        )
+    elif "qwen" in llm_state.model:
+        agent_executor = agent_excutor_mapping["qwen"](
+            tools_state.tools_inst, model_kwargs
+        )
+    set_global_value("agent_executor", agent_executor)
+    chat_history = cast(list[dict[str, str]], get_global_value("chat_history"))
+    try:
+        yield AGENT_START
+        yield SEP_OF_LINE
+        for chunk in agent_executor.stream(
+            {
+                "chat_history": [convert_dict_to_message(m) for m in chat_history],
+                "input": user_input,
+            }
+        ):
+            # Agent Action
+            if "actions" in chunk:
+                for action in chunk["actions"]:
+                    yield f"Calling Tool:`{action.tool}` with input `{action.tool_input}`"
+            # Observation
+            elif "steps" in chunk:
+                for step in chunk["steps"]:
+                    yield f"Tool Result:`{step.observation}`"
+            # Final result
+            elif "output" in chunk:
+                result = chunk["output"]
+                yield f'Final Output: {chunk["output"]}'
+            else:
+                raise ValueError()
+            yield SEP_OF_LINE
+        yield AGENT_DONE
+        yield result
+    except Exception as e:
+        channel = load_channel()
+        channel.show_modal("warning", repr(e))
+        logger.error(repr(e))
+        yield AGENT_DONE
+        yield repr(e)
+        # if stream:
+        #     yield from repr(e)
+        # else:
+        #     return repr(e)

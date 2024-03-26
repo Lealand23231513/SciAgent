@@ -1,13 +1,21 @@
 # -*- coding: utf-8 -*-
 import logging
-def _init():  # 初始化
-    global _global_dict
-    _global_dict = {}
+from typing import Any
 
-def set_global_value(key, value):
-    #定义一个全局变量
+logger = logging.getLogger(__name__)
+
+
+def _init():
+    global _global_dict, _waiting_dict
+    _global_dict, _waiting_dict = {}, {}
+    
+
+
+def set_global_value(key: str, value: Any):
+    """Define a global var"""
     _global_dict[key] = value
 
-def get_global_value(key:str):
-    #获得一个全局变量，不存在则提示读取对应变量失败
+
+def get_global_value(key: str)-> Any:
+    """get global var"""
     return _global_dict.get(key)

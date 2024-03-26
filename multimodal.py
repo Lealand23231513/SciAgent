@@ -7,6 +7,9 @@ from typing import Optional, cast
 from pathlib import Path
 import base64
 
+from global_var import get_global_value
+from model_state import MLLMState
+
 logger = logging.getLogger(Path(__file__).stem)
 
 
@@ -49,34 +52,35 @@ def _build_messages(user_message: list[str | dict[str, str]]) -> list:
 
 def multimodal_chat(
     user_message: list,
-    model: str,
     stream=False,
-    api_key: Optional[str] = None,
-    base_url: Optional[str] = None,
 ):
-    if api_key=='':
-        api_key=None
-    if base_url=='':
-        base_url=None
+    mllm_state = cast(MLLMState, get_global_value('mllm_state'))
+    
+    api_key=mllm_state.api_key if mllm_state.api_key else None
+    base_url = mllm_state.base_url if mllm_state.base_url else None
     client = OpenAI(api_key=api_key, base_url=base_url)
     messages = _build_messages(user_message)
     logger = logging.getLogger(Path(__file__).name)
-    logger.info(messages)
+    logger.info(mllm_state.model_dump())
     try:
         response = client.chat.completions.create(
-            model=model,
+            model=mllm_state.model,
             stream=stream,
             messages=messages,
-            max_tokens=10
+            max_tokens=mllm_state.max_tokens
         )
-    except HTTPError as httpe:
-        logger.exception(httpe)
-    if stream:
-        response = cast(Stream[ChatCompletionChunk], response)
-        for chunk in response:
-            part = chunk.choices[0].delta.content
-            if part:
-                yield part
-    else:
-        response = cast(ChatCompletion, response)
-        return response.choices[0].message.content
+        if stream:
+            response = cast(Stream[ChatCompletionChunk], response)
+            for chunk in response:
+                part = chunk.choices[0].delta.content
+                if part:
+                    yield part
+        else:
+            response = cast(ChatCompletion, response)
+            return response.choices[0].message.content
+    except Exception as e:
+        logger.error(e)
+        if stream:
+            yield from repr(e)
+        else:
+            return repr(e)

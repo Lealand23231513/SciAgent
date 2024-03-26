@@ -1,5 +1,0 @@
-paddlepaddle==2.6.0
-paddlespeech==1.4.0
-paddlespeech-ctcdecoders==0.2.0
-paddlespeech-feat==0.1.0
-pytest-runner==6.0.1
