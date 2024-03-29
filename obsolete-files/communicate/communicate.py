@@ -12,6 +12,7 @@ import json
 import re
 import openai
 from utils import fn_args_generator, auto_extractor
+
 logger = logging.getLogger(Path(__file__).stem)
 
 refine_prompt_template = (
@@ -37,15 +38,23 @@ initial_qa_template = (
     "answer the question: {question}\n Your answer should be concise, less than 150 words is best.\n"
     "If you can't find answer from the context, you should explain the situation and answer the question based on your own knowledge."
 )
+
+
 def retrieve_file(path):
-    if(path.split(".")[-1] == 'pdf'):
+    if path.split(".")[-1] == "pdf":
         loader = PyPDFLoader(path)
-    elif(path.split(".")[-1] == 'docx'):
+    elif path.split(".")[-1] == "docx":
         loader = Docx2txtLoader(path)
     else:
-        logger.error("WRONG EXTENSION: expect '.pdf' or '.docx', but receive '%s'." % path.split(".")[-1])
-        raise Exception("WRONG EXTENSION: expect '.pdf' or '.docx', but receive '%s'." % path.split(".")[-1])
-    
+        logger.error(
+            "WRONG EXTENSION: expect '.pdf' or '.docx', but receive '%s'."
+            % path.split(".")[-1]
+        )
+        raise Exception(
+            "WRONG EXTENSION: expect '.pdf' or '.docx', but receive '%s'."
+            % path.split(".")[-1]
+        )
+
     documents = loader.load()
     text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
     docs = text_splitter.split_documents(documents)
@@ -53,13 +62,12 @@ def retrieve_file(path):
     return docs
 
 
-
-def communicate(path, query:str) -> str:
-    '''
+def communicate(path, query: str) -> str:
+    """
     :param path: path or url of the paper
-    :param query: User's question about the paper  
-    '''
-    
+    :param query: User's question about the paper
+    """
+
     docs = retrieve_file(path)
     # keywords = auto_extractor(query)
     # logger.info("keywords: {}".format(', '.join(keywords)))
@@ -76,16 +84,21 @@ def communicate(path, query:str) -> str:
         input_variables=["context_str", "question"], template=initial_qa_template
     )
 
-    chain = load_qa_chain(llm=OpenAI(temperature=0.1, max_tokens=1000, model="gpt-3.5-turbo-instruct"), 
-                        chain_type="refine",
-                        question_prompt=initial_qa_prompt,
-                        refine_prompt=refine_prompt)
-    ans = chain.invoke({"input_documents": docs, "question": query}, return_only_outputs=True)
-    logger.info(ans['output_text'])
-        
-    return ans['output_text']
+    chain = load_qa_chain(
+        llm=OpenAI(temperature=0.1, max_tokens=1000, model="gpt-3.5-turbo-instruct"),
+        chain_type="refine",
+        question_prompt=initial_qa_prompt,
+        refine_prompt=refine_prompt,
+    )
+    ans = chain.invoke(
+        {"input_documents": docs, "question": query}, return_only_outputs=True
+    )
+    logger.info(ans["output_text"])
 
-def communicator_auto_runner(user_input:str, functions, history = []) -> str:
+    return ans["output_text"]
+
+
+def communicator_auto_runner(user_input: str, functions, history=[]) -> str:
     openai.api_key = os.environ["OPENAI_API_KEY"]
     function_args = fn_args_generator(user_input, functions, history)
     logger.debug(f"funtion args:\n{function_args}")
@@ -93,13 +106,17 @@ def communicator_auto_runner(user_input:str, functions, history = []) -> str:
     query = function_args.get("query")
     result = communicate(path, query)
     return result
-    
-if __name__ == '__main__':
+
+
+if __name__ == "__main__":
     from dotenv import load_dotenv
-    
+
     load_dotenv()
-    openai.api_key = os.getenv('OPENAI_API_KEY')
-    test_file = r".cache\ClaMP.pdf"
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+    # test_file = r".cache\ClaMP.pdf"
     test_url = "https://arxiv.org/pdf/1706.03762.pdf"
-    communicate_result = communicate(test_file, "What are the two components with extreme distributions that RepQ-ViT focuses on?")
+    communicate_result = communicate(
+        test_url,
+        "What are the two components with extreme distributions that RepQ-ViT focuses on?",
+    )
     print(communicate_result)
