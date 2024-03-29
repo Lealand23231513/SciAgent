@@ -7,6 +7,7 @@
 
 # Use
 ```bash
+conda create -n python=3.12
 git clone https://github.com/Lealand23231513/SciAgent.git
 cd SciAgent
 pip install -r requirements.txt
