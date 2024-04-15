@@ -62,7 +62,7 @@ class RetrievalTool(BaseModel):
         res_docs = cast(list[Document], res_docs)
         result = [res_doc.dict() for res_doc in res_docs]
         logger.info(result)
-        return json.dumps(result)
+        return json.dumps(result, ensure_ascii=False)
 
 
 class RetrievalInput(BaseModel):

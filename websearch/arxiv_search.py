@@ -194,7 +194,7 @@ class CustomArxivQueryRun(BaseTool):
     name: str = ArxivConst.NAME
     description: str = (
         "A wrapper around Arxiv.org "
-        "Useful for when you need to answer questions about Physics, Mathematics, "
+        "Use this tool only if you need to answer questions about Physics, Mathematics, "
         "Computer Science, Quantitative Biology, Quantitative Finance, Statistics, "
         "Electrical Engineering, and Economics "
         "from scientific articles on arxiv.org. "

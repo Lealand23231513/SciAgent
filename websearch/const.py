@@ -1,6 +1,6 @@
 class BingSearchConst:
     NAME = "bing"
-    DEFAULT_MAX_RESULT = 5
+    DEFAULT_MAX_RESULT = 20
     MINIMUM_MAX_RESULT = 1
     MAXIMUN_MAX_RESULT = 10
     DEFAULT_TOP_K_RESULTS = 3
@@ -14,7 +14,7 @@ class BingSearchConst:
     MIN_CHUNK_OVERLAP = 0
     DEFAULT_MAX_RETRIES = 5
     MAX_TIME_SLEEP = 0.5
-    BASE_URL = "https://cn.bing.com/"
+    bing_search_url = "https://api.bing.microsoft.com/v7.0/search"
 
 
 class ArxivConst:

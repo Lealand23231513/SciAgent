@@ -3,10 +3,11 @@ SUPPORT_TOOLS = ['websearch', 'retrieval']
 SUPPORT_LLMS = [
     'gpt-3.5-turbo-0125',
     'gpt-3.5-turbo',
-    'chatglm3-6b',
+    'gpt-4',
+    'gpt-4-0125-preview',
     'glm-3-turbo',
     'glm-4',
-    'gpt-4',
+    'chatglm3-6b',
     'qwen1.5-0.5b-chat',
     'qwen1.5-1.8b-chat',
     'qwen1.5-4b-chat',

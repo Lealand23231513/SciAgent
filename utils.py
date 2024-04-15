@@ -1,3 +1,7 @@
+from langchain.agents import AgentExecutor
+from langchain.agents.format_scratchpad.openai_tools import format_to_openai_tool_messages
+from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
+from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 from openai import OpenAI
 import json
@@ -12,39 +16,25 @@ from langchain.schema import BaseOutputParser
 from langchain.chains import LLMChain
 import logging
 from pathlib import Path
-from pydantic.v1.config import Extra
 from pydantic import BaseModel, model_validator, root_validator, validator
 import os
 import logging
 from pathlib import Path
 from dotenv import load_dotenv
 from langchain_community.adapters.openai import convert_dict_to_message
-from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
-from langchain.agents.format_scratchpad.openai_tools import (
-    format_to_openai_tool_messages,
-)
-from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
-from langchain.agents import AgentExecutor
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 import json
 import logging
 from pathlib import Path
 from typing import (
     Any,
-    List,
-    Tuple,
     Union,
 )
-from langchain_core.agents import AgentAction, AgentFinish
-from langchain_core.callbacks import (
-    Callbacks,
-)
 from langchain_core.output_parsers import BaseOutputParser
-from langchain_core.tools import BaseTool
 from langchain.chains.llm import LLMChain
-from types import MethodType
 from global_var import *
+from global_var import Any
 logger = logging.getLogger(Path(__file__).stem)
 
 
@@ -198,14 +188,23 @@ keyword1,keyword2,...
         raise Exception('response.choices[0].message.content is None')
     return keywords
 
-def load_qwen_agent_executor(tools_inst:list[BaseTool], model_kwargs:dict[str,Any]):
+if __name__ == '__main__':
+    from dotenv import load_dotenv
+    import openai
+    load_dotenv()
+    openai.api_key = os.getenv('OPENAI_API_KEY')
+    print(auto_extractor("What are the two components with extreme distributions that RepQ-ViT focuses on?"))
+
+
+def load_zhipuai_agent_excutor(
+    tools_inst: list[BaseTool], model_kwargs:dict[str,Any]
+):
     model = model_kwargs.pop('model')
     temperature = model_kwargs.pop('temperature')
     api_key = model_kwargs.pop('api_key')
     base_url = model_kwargs.pop('base_url')
     llm = ChatOpenAI(model=model, temperature=temperature,api_key=api_key,base_url=base_url, model_kwargs=model_kwargs)
-    llm = ChatOpenAI(model=model, temperature=0, api_key="EMPTY", base_url=base_url)#type:ignore
-    if len(tools_inst)==0:
+    if len(tools_inst) == 0:
         llm_with_tools = llm
     else:
         llm_with_tools = llm.bind_tools(tools_inst)
@@ -230,40 +229,7 @@ def load_qwen_agent_executor(tools_inst:list[BaseTool], model_kwargs:dict[str,An
         | llm_with_tools
         | OpenAIToolsAgentOutputParser()
     )
-    def plan(
-        self,
-        intermediate_steps: List[Tuple[AgentAction, str]],
-        callbacks: Callbacks = None,
-        **kwargs: Any,
-    ) -> Union[
-        List[AgentAction],
-        AgentFinish,
-    ]:
-        """Based on past history and current inputs, decide what to do.
-
-        Args:
-            intermediate_steps: Steps the LLM has taken to date,
-                along with the observations.
-            callbacks: Callbacks to run.
-            **kwargs: User inputs.
-
-        Returns:
-            Action specifying what tool to use.
-        """
-        inputs = {**kwargs, **{"intermediate_steps": intermediate_steps}}
-        return self.runnable.invoke(inputs, config={"callbacks": callbacks})
-    
-    agent_executor = AgentExecutor(agent=agent, #type: ignore
-                                   tools=tools_inst, handle_parsing_errors=True)
-    
-    agent_executor.agent.__config__.extra=Extra.allow
-    agent_executor.agent.plan=MethodType(plan, agent_executor.agent)
+    agent_executor = AgentExecutor(
+        agent=agent, tools=tools_inst, handle_parsing_errors=True  # type: ignore
+    )
     return agent_executor
-
-
-if __name__ == '__main__':
-    from dotenv import load_dotenv
-    import openai
-    load_dotenv()
-    openai.api_key = os.getenv('OPENAI_API_KEY')
-    print(auto_extractor("What are the two components with extreme distributions that RepQ-ViT focuses on?"))

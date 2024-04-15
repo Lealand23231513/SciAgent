@@ -5,9 +5,9 @@ import atexit
 import pickle
 from model_state import EMBState, EMBStateConst
 from venv import logger
-from grpc import Channel
 from langchain.text_splitter import CharacterTextSplitter
-from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
+from langchain_community.document_loaders.pdf import PyPDFLoader
+from langchain_community.document_loaders.word_document import Docx2txtLoader
 from langchain_community.vectorstores.chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.embeddings.huggingface import HuggingFaceEmbeddings
@@ -65,6 +65,10 @@ def _write_cache_lst():
     with open(CacheConst.CACHE_LIST_PATH,'w') as f:
         json.dump(cache_lst,f)
 
+def _clear_non_utf8_ch(docs):
+    for i in range(len(docs)):
+        docs[i].page_content = docs[i].page_content.encode(errors='ignore').decode()
+    return docs
 class Cache(object):
     def __init__(
         self,
@@ -215,6 +219,7 @@ class Cache(object):
             )
 
         raw_docs = loader.load()
+        raw_docs = _clear_non_utf8_ch(raw_docs)
         for i in range(len(raw_docs)):
             raw_docs[i].metadata["source"] = Path(raw_docs[i].metadata["source"]).name
         cache_state:CacheState = get_global_value('cache_state')

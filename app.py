@@ -2,13 +2,13 @@ import gradio as gr
 import logging
 import pathvalidate
 import os
-from controler import call_agent, AGENT_DONE
+from controler import call_agent, AGENT_DONE, chat_with_document
 from pathlib import Path
 from dotenv import load_dotenv
 
 from config import *
 from gradio_mchatbot import MultiModalChatbot
-from typing import Any, Optional, cast, Generator
+from typing import Optional, cast, Generator
 import global_var
 from cache import (
     init_cache,
@@ -27,8 +27,7 @@ import state
 
 from gradio_mypdf import PDF
 from gradio_modal import Modal
-from document_qa import document_qa_fn
-from multimodal import multimodal_chat
+from multimodal import multimodal_chat, multimodal_chat_stream
 from model_state import (
     LLMState,
     LLMStateConst,
@@ -102,35 +101,28 @@ def vqa_chat(history: list, user_input: Optional[str], img_path: Optional[str]):
         user_message = [user_input]
     history.append([user_message, None])
     yield history, gr.update(interactive=False)
-    stream_response = multimodal_chat(user_message, stream=True)
+    # stream
+    stream_response = multimodal_chat_stream(user_message)
     stream_response = cast(Generator, stream_response)
     response_message = ""
     for delta in stream_response:
         response_message += delta
         history[-1][1] = response_message
         yield history, None
-    logger.info("vqa chat end")
+
+    # not stream
+    # response = multimodal_chat(user_message)
+    # logger.info(response)
+    # history[-1][1] = response
     yield history, gr.update(interactive=True)
+    logger.info("vqa chat end")
     state.StateMutex.set_state_mutex(False)
 
 
 def check_and_clear_pdfqa_history(filepath: str | None, txt: str, chat_history: list):
     if filepath is None:
-        return [], None
+        return chat_history, None
     return chat_history, txt
-
-
-def chat_with_document(filepath: str, question: str, chat_history: list):
-    state.StateMutex.set_state_mutex(True)
-    chat_history.append([question, None])
-    yield chat_history, gr.Textbox(interactive=False)
-    answer = document_qa_fn(filepath, question)
-    chat_history[-1][1] = ""
-    for chunk in answer:
-        chat_history[-1][1] += chunk
-        yield chat_history, None
-    yield chat_history, gr.Textbox(interactive=True)
-    state.StateMutex.set_state_mutex(False)
 
 
 def on_select(evt: gr.SelectData):
@@ -322,6 +314,7 @@ def create_ui():
         mllm_state: MLLMState = global_var.get_global_value("mllm_state")
         llm_state: LLMState = global_var.get_global_value("llm_state")
         pdf_llm_state: LLMState = global_var.get_global_value("pdf_llm_state")
+        global_var.set_global_value("chat_history", [])
         return {
             dstCachedPapers: [[i] for i in cache.all_files] if cache else [],
             cacheFilesDdl: (
@@ -344,6 +337,77 @@ def create_ui():
         }
 
     with gr.Blocks(title="SciAgent", theme="soft") as demo:
+        with gr.Tab(label="文档问答"):
+            with gr.Row():
+                with gr.Column():
+                    with gr.Accordion("模型设置"):
+                        pdfLlmDdl = gr.Dropdown(
+                            choices=LLMStateConst.LLM_CHOICES,  # type:ignore
+                            value=LLMStateConst.DEFAULT_LLM,
+                            label="模型ID",
+                        )
+                        pdfLlmApikeyDdl = gr.Textbox(
+                            label="模型api-key",
+                            type="password",
+                            value=LLMStateConst.DEFAULT_API_KEY,
+                        )
+
+                        pdfLlmBaseurlTxt = gr.Textbox(
+                            label="模型baseurl",
+                            info="如使用Openai模型此栏请留空",  # BUG info不显示
+                            value=LLMStateConst.DEFAULT_BASE_URL,
+                        )
+                        pdfLlmTempSlider = gr.Slider(
+                            label="temperature",
+                            minimum=LLMStateConst.MIN_TEMPERATURE,
+                            maximum=LLMStateConst.MAX_TEMPERATURE,
+                            value=LLMStateConst.DEFAULT_TEMPERATURE,
+                            info=f"请在0至1之间选择",
+                            interactive=True,
+                        )
+                    gr.Markdown("模型上下文长度有限，请不要传入太长的文章。")
+                    pdfBox = PDF(
+                        label="PDF文档",
+                        height=700,
+                    )
+                    gr.on(
+                        [
+                            pdfLlmDdl.change,
+                            pdfLlmApikeyDdl.change,
+                            pdfLlmBaseurlTxt.change,
+                            pdfLlmTempSlider.change,
+                        ],
+                        lambda model, api_key, base_url, temperature: state.change_state(
+                            "pdf_llm_state",
+                            model=model,
+                            api_key=api_key,
+                            base_url=base_url,
+                            temperature=temperature,
+                        ),
+                        inputs=[
+                            pdfLlmDdl,
+                            pdfLlmApikeyDdl,
+                            pdfLlmBaseurlTxt,
+                            pdfLlmTempSlider,
+                        ],
+                    )
+                with gr.Column():
+                    docChatbot = gr.Chatbot(label="问答记录", height=800)
+                    with gr.Row():
+                        docTxtbot = gr.Textbox(
+                            label="用户对话框",
+                            placeholder="在这里输入",
+                            lines=8,
+                            scale=3,
+                        )
+                        docAudio = gr.Audio(
+                            label="语音输入", type="filepath", format="wav", scale=1
+                        )
+                    with gr.Row():
+                        docClearBtn = gr.ClearButton(
+                            value="清除问答记录", components=[docTxtbot, docChatbot]
+                        )
+                        docSubmitBtn = gr.Button("提交")
         with gr.Tab(label="使用Agent"):
             with gr.Row():
                 with gr.Column(scale=3):
@@ -587,14 +651,14 @@ def create_ui():
                             value=CacheConst.DEFAULT_CHUNK_OVERLAP,
                             interactive=True,
                         )
-                        cacheFilesDdl = gr.Dropdown(
-                            label="选择要从本地知识库中删除的文章",
-                            multiselect=True,
-                        )
                         uploadFileBot = gr.File(
                             label="上传文件",
                             file_types=[".pdf", ".docx"],
                             file_count="multiple",
+                        )
+                        cacheFilesDdl = gr.Dropdown(
+                            label="选择要从本地知识库中删除的文章",
+                            multiselect=True,
                         )
                         delete_button = gr.Button("删除")
                         cleanCacheBtn = gr.Button("删除全部")
@@ -657,77 +721,7 @@ def create_ui():
                         fn=submit,
                         inputs=[chatbot, txtbot, audio, exeLogTxt],
                         outputs=[chatbot, txtbot, audio, exeLogTxt],
-                        scroll_to_output=True,
                     )
-
-        # with gr.Tab(label="工作台"):
-        #     pass
-        with gr.Tab(label="PDF文档问答"):
-            with gr.Row():
-                with gr.Column():
-                    with gr.Accordion("模型设置"):
-                        pdfLlmDdl = gr.Dropdown(
-                            choices=LLMStateConst.LLM_CHOICES,  # type:ignore
-                            value=LLMStateConst.DEFAULT_LLM,
-                            label="模型ID",
-                        )
-                        pdfLlmApikeyDdl = gr.Textbox(
-                            label="模型api-key",
-                            type="password",
-                            value=LLMStateConst.DEFAULT_API_KEY,
-                        )
-
-                        pdfLlmBaseurlTxt = gr.Textbox(
-                            label="模型baseurl",
-                            info="如使用Openai模型此栏请留空",  # BUG info不显示
-                            value=LLMStateConst.DEFAULT_BASE_URL,
-                        )
-                        pdfLlmTempSlider = gr.Slider(
-                            label="temperature",
-                            minimum=LLMStateConst.MIN_TEMPERATURE,
-                            maximum=LLMStateConst.MAX_TEMPERATURE,
-                            value=LLMStateConst.DEFAULT_TEMPERATURE,
-                            info=f"请在0至1之间选择",
-                            interactive=True,
-                        )
-                    gr.Markdown("模型上下文长度有限，请不要传入太长的文章。")
-                    pdfBox = PDF(
-                        label="PDF文档",
-                        height=700,
-                        info="模型上下文长度有限，请不要传入太长的文章。",
-                    )
-                    gr.on(
-                        [
-                            pdfLlmDdl.change,
-                            pdfLlmApikeyDdl.change,
-                            pdfLlmBaseurlTxt.change,
-                            pdfLlmTempSlider.change,
-                        ],
-                        lambda model, api_key, base_url, temperature: state.change_state(
-                            "pdf_llm_state",
-                            model=model,
-                            api_key=api_key,
-                            base_url=base_url,
-                            temperature=temperature,
-                        ),
-                        inputs=[
-                            pdfLlmDdl,
-                            pdfLlmApikeyDdl,
-                            pdfLlmBaseurlTxt,
-                            pdfLlmTempSlider,
-                        ],
-                    )
-                with gr.Column():
-                    docChatbot = gr.Chatbot(label="问答记录", height=800)
-                    docTxtbot = gr.Textbox(
-                        label="用户对话框:", placeholder="在这里输入", lines=4
-                    )
-                    # docChatHistory = gr.State([])
-                    with gr.Row():
-                        docClearBtn = gr.ClearButton(
-                            value="清除问答记录", components=[docTxtbot, docChatbot]
-                        )
-                        docSubmitBtn = gr.Button("提交")
         with gr.Tab(label="视觉问答"):
             with gr.Row():
                 with gr.Column(scale=3):
@@ -830,9 +824,9 @@ def create_ui():
             _state_change, inputs=[reloadUICkb], outputs=[modal, modalMsg, reloadUICkb]
         )
         gr.on(
-            [docTxtbot.submit, docSubmitBtn.click],
+            [docSubmitBtn.click],
             fn=chat_with_document,
-            inputs=[pdfBox, docTxtbot, docChatbot],
+            inputs=[pdfBox, docTxtbot, docChatbot, docAudio],
             outputs=[docChatbot, docTxtbot],
         )
         pdfBox.change(
@@ -870,7 +864,7 @@ def create_ui():
 
 # Launch gradio UI
 def main():
-    # load_dotenv()
+    load_dotenv()
 
     global_var._init()
     if Path(DEFAULT_CACHE_DIR).exists() == False:

@@ -16,6 +16,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from channel import load_channel
 from model_state import LLMState
+from langchain_core.tools import tool, StructuredTool
 
 logger = logging.getLogger(Path(__file__).stem)
 
@@ -119,13 +120,13 @@ def _load_docs(path: str):
 
 
 def document_qa_fn(
-    path: str, query: str, strategy: Literal["stuff", "refine"] = "refine"
+    path: str, query: str, strategy: Literal["stuff", "refine"] = "stuff"
 ) -> str:
     """
     :param path: path or url of the paper
     :param query: User's question about the paper
     """
-    logger.info("File QA start")
+    logger.info("document qa start")
     logger.info(f"path: {path} query: {query} strategy: {strategy}")
     docs = _load_docs(path)
     chain = _get_chain(strategy)
@@ -142,6 +143,7 @@ def document_qa_fn(
         return repr(e)
 
 
+
 if __name__ == "__main__":
     from dotenv import load_dotenv
     
@@ -152,7 +154,6 @@ if __name__ == "__main__":
     )
     logger = logging.getLogger(__name__)
     openai.api_key = os.getenv('OPENAI_API_KEY')
-    # test_file = r".cache\ClaMP.pdf"
     test_url = "https://arxiv.org/pdf/1706.03762.pdf"
     global_var._init()
     load_channel()
