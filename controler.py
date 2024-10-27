@@ -27,7 +27,7 @@ from channel import load_channel
 from langchain_core.callbacks import (
     Callbacks,
 )
-from document_qa import document_qa_fn
+from document_qa import document_qa_fn, get_document_qa_tool
 from langchain_core.tools import StructuredTool
 from websearch.arxiv_search import get_customed_arxiv_search_tool
 from websearch.bing_search import get_bing_search_tool
@@ -240,11 +240,12 @@ def chat_with_document(filepath: str|None, user_input: str, chat_history: list, 
     yield chat_history, gr.Textbox(interactive=False)
     
     if filepath:
-        document_qa_tool = StructuredTool.from_function(
-            func=lambda query:document_qa_fn(path=filepath, query=query),
-            name="document_qa",
-            description="useful for when you need to answer questions about the document.",
-        )
+        # document_qa_tool = StructuredTool.from_function(
+        #     func=lambda query:document_qa_fn(path=filepath, query=query),
+        #     name="document_qa",
+        #     description="useful for when you need to answer questions about the document.",
+        # )
+        document_qa_tool = get_document_qa_tool(path=filepath)
         system_prompt = DEFAULT_SYSTEM_PROMPT + f"Help the user read the paper {Path(filepath).name}."
         # agent_executor = load_agent_executor('pdf_llm_state', [document_qa_tool, arxiv_search], reload_agent, system_prompt=system_prompt)
         agent_executor = load_agent_executor('pdf_llm_state', [document_qa_tool], reload_agent, system_prompt=system_prompt)

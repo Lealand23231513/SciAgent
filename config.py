@@ -27,7 +27,7 @@ EMB_MODEL_MAP = {
 }
 DEFAULT_EMB_MODEL_NAME="text-embedding-ada-002"
 SUPPORT_MLLMS = [
-    "gpt-4-vision-preview"
+    "gpt-4o"
 ]
 
 
